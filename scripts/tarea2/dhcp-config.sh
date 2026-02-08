@@ -4,6 +4,11 @@
 
 #ver si tiene los paquetes necesarios
 
+read -p "Continuar (s/n): " continuar
+if [ $continuar == 'n' ]; then
+	exit 0
+fi
+
 echo "----------------------------------"
 echo "-- Verificacion de lo necesario --"
 echo "----------------------------------"
@@ -16,7 +21,6 @@ else
 	sudo dnf install kea -y
 fi
 
-read
 clear
 
 #Peticion de los datos necesarios
@@ -59,22 +63,27 @@ fi
 sudo bash -c "cat <<EOF > /etc/kea/kea-dhcp4.conf
 {
 \"Dhcp4\": {
-	\"interfaces-config\": { \"interfaces\": [ \"ens192\" ] },
+	\"interfaces-config\": { 
+		\"interfaces\": [ \"ens192\" ] 
+	},
 	\"valid-lifetime\": $tiempo,
-	\"subnet4\": [ {
-		\"subnet\": \"192.168.100.0/24\",
-		\"pools\": [ { \"pool\": \"$initIP - $finIP\" } ],
-		\"option-data\": [
-			{ \"name\": \"routers\", \"data\": \"$routerIP\" },
-			{ \"name\": \"domain-name-servers\", \"data\": \"$dnsIP\" }
-		]
-	} ]
+	\"subnet4\": [ 
+		{
+			\"id\": 1,
+			\"subnet\": \"192.168.100.0/24\",
+			\"pools\": [ { \"pool\": \"$initIP - $finIP\" } ],
+			\"option-data\": [
+				{ \"name\": \"routers\", \"data\": \"$routerIP\" },
+				{ \"name\": \"domain-name-servers\", \"data\": \"$dnsIP\" }
+			]
+		} 
+	]
 }
 }
 EOF"
 
 #Validacion del archivo .conf
-if kea-dhcp4 -t /etc/kea/kea-dhcp4.conf > /dev/null 2>&1; then
+if sudo kea-dhcp4 -t /etc/kea/kea-dhcp4.conf > /dev/null 2>&1; then
 	echo "[OK] Archivo de configuracion sin errores. Aplicando cambios..."
 	sudo systemctl restart kea-dhcp4
 else
@@ -82,7 +91,7 @@ else
 	exit 1
 fi
 
-if [ ! systemctl is-active kea-dhcp4 --quiet ]; then
+if ! systemctl is-active kea-dhcp4 --quiet; then
 	sudo systemctl start kea-dhcp4
 	sudo systemctl enable kea dhcp4	
 fi

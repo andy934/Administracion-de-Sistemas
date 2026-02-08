@@ -14,9 +14,12 @@ diagnosticoDHCP(){
 
 	#listado de concesiones
 	echo "Equipos conectados actualmente: "
-	if [ -f /var/lib/kea-leases4.csv ]; then
-		column -s, -t /var/lib/kea-leases4.csv | tail -n + 2
+	if [ -f /var/lib/kea/kea-leases4.csv ]; then
+		column -s, -t /var/lib/kea/kea-leases4.csv | tail -n +2
 	else
 		echo "No hay concesiones activas"
 	fi
 }
+
+
+diagnosticoDHCP
