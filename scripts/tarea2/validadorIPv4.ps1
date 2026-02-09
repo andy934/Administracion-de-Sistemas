@@ -1,0 +1,24 @@
+function Validar-IP {
+	param($uIP)
+	
+	$regla='^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$'
+	
+	if ( $uIP -match $regla){
+		$res = 0
+	}else{
+		$res = 1
+	}
+	
+	return $res		
+}
+<#
+$uIP = Read-Host "IP: "
+
+$res = Validar-IP -uIP $uIP
+
+if ( $res -eq 0){
+	Write-Host "Su ip es IPv4"
+}else{
+	Write-Host "Su ip no es IPv4"
+}
+#>
