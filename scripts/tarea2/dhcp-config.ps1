@@ -5,6 +5,13 @@
 #ver si tiene el servidor DHCP intalado
 $dhcpInstall = (Get-WindowsFeature DHCP).installed
 
+$op = Read-Host "SI HACE OTRA CONFIGURACION EL ARCHIVO ACTUAL SE BORRARA. Continuar (s/n)"
+if ($op -ieq 'n'){
+	Write-Host "Operacion Cancelada por el usuario"
+	exit 0
+}
+
+Remove-DhcpServerv4Scope -ScopeId 192.168.100.0 -Force
 if ( -not $dhcpInstall){
 	Install-WindowsFeature -Name DHCP -IncludeManagementTools
 	Restart-Service DhcpServer
