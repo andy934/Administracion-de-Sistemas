@@ -22,4 +22,4 @@ diagnosticoDHCP(){
 }
 
 
-diagnosticoDHCP
+#diagnosticoDHCP
