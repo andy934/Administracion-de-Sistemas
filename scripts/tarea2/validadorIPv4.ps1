@@ -11,6 +11,7 @@ function Validar-IP {
 	
 	return $res		
 }
+
 <#
 $uIP = Read-Host "IP: "
 

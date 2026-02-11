@@ -9,4 +9,4 @@ function diagnostico-DHCP {
 	Get-DhcpServerv4Lease -ScopeId 192.168.100.0 | Select-Object IPAddress, ClienteId, HostName, LeaseExpiryTime
 }
 
-diagnostico-DHCP
+#diagnostico-DHCP
