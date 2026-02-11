@@ -19,20 +19,35 @@ case $op in
 		else
 			sudo dnf install kea -y
 			echo "[INSTALANDO] Procediendo con la instalcion del servidor DHCP..."
-		fi ;;
+		fi
+		systemctl restart kea-dhcp4 ;;
 	2)
 		read -p "Nombre descriptivo: " scope
+		
+		read -p "Ingrese el segmento de red: " $segmentoIP
+		#validarIP $segmentoIP
+		if ! validarIP "$segmentoIP" ; then
+			echo "Error: La IP no cumpole con el formato de IPv4..."
+			exit 1
+		fi
+
 		read -p "Rango inicial de direcciones IPv4: (ej. 192.168.100.50) " initIP
 		validarIP $initIP
 		if [ $res -ne 0 ]; then
-			echo "Erro: La IP no cumpole con el formato de IPv4..."
+			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
 				
 		read -p "Rango final de direcciones IPv4: (ej. 192.168.100.150) " finIP
 		validarIP $finIP
 		if [ $res -ne 0 ]; then
-			echo "Erro: La IP no cumpole con el formato de IPv4..."
+			echo "Error: La IP no cumpole con el formato de IPv4..."
+			exit 1
+		fi
+
+		#Validacion que las ips sean del segmento de red ingresado
+		if [[ $initIP != $segmentoIP* ]] || [[ $finIP != $segmentoIP* ]]; then
+			echo "Error: Las IPs del rango no pertenecen al segmento $segmentoIP"
 			exit 1
 		fi
 				
@@ -40,38 +55,40 @@ case $op in
 		read -p "Ingrese la IPv4 del Router/Gateway: " routerIP
 		validarIP $routerIP
 		if [ $res -ne 0 ]; then
-			echo "Erro: La IP no cumpole con el formato de IPv4..."
+			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
-				
-		read -p "Ingrese la IPv4 del DNS: " dnsIP
+
+		read -p "Ingrese la IPv4 del Router/Gateway: " dnsIP
 		validarIP $dnsIP
 		if [ $res -ne 0 ]; then
-			echo "Erro: La IP no cumpole con el formato de IPv4..."
+			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
-		fi 
-		
-		sudo bash -c "cat <<EOF > /etc/kea/kea-dhcp4.conf
+		fi
+
+		export segmentoIP=$segmentoIP
+				
+		sudo -E tee /etc/kea/kea-dhcp4.conf <<EOF > /dev/null
+{
+"Dhcp4": {
+	"interfaces-config": { 
+		"interfaces": [ "ens192" ] 
+	},
+	"valid-lifetime": $tiempo,
+	"subnet4": [ 
 		{
-		\"Dhcp4\": {
-			\"interfaces-config\": { 
-			\"interfaces\": [ \"ens192\" ] 
-		},
-		\"valid-lifetime\": $tiempo,
-		\"subnet4\": [ 
-			{
-				\"id\": 1,
-				\"subnet\": \"192.168.100.0/24\",
-				\"pools\": [ { \"pool\": \"$initIP - $finIP\" } ],
-				\"option-data\": [
-					{ \"name\": \"routers\", \"data\": \"$routerIP\" },
-					{ \"name\": \"domain-name-servers\", \"data\": \"$dnsIP\" }
-				]
-			} 
-		]
-		}
-		}
-		EOF"
+			"id": 1,
+			"subnet": "192.168.100.0/24",
+			"pools": [ { "pool": "$initIP - $finIP" } ],
+			"option-data": [
+				{ "name": "routers", "data": "$routerIP" },
+				{ "name": "domain-name-servers", "data": "$dnsIP" }
+			]
+		} 
+	]
+}
+}
+EOF
 						
 		#Validacion del archivo .conf
 		if sudo kea-dhcp4 -t /etc/kea/kea-dhcp4.conf > /dev/null 2>&1; then
