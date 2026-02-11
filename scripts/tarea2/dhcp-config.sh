@@ -24,7 +24,7 @@ case $op in
 	2)
 		read -p "Nombre descriptivo: " scope
 		
-		read -p "Ingrese el segmento de red: " $segmentoIP
+		read -p "Ingrese el segmento de red: " segmentoIP
 		#validarIP $segmentoIP
 		if ! validarIP "$segmentoIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
@@ -32,41 +32,39 @@ case $op in
 		fi
 
 		read -p "Rango inicial de direcciones IPv4: (ej. 192.168.100.50) " initIP
-		validarIP $initIP
-		if [ $res -ne 0 ]; then
+		if ! validarIP "$segmentoIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
 				
 		read -p "Rango final de direcciones IPv4: (ej. 192.168.100.150) " finIP
-		validarIP $finIP
-		if [ $res -ne 0 ]; then
+		if ! validarIP "$segmentoIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
 
 		#Validacion que las ips sean del segmento de red ingresado
-		if [[ $initIP != $segmentoIP* ]] || [[ $finIP != $segmentoIP* ]]; then
+		segmento_base=$(echo $segmentoIP | cut -d. -f1-3)
+		init_base=$(echo $initIP | cut -d. -f1-3)
+		fin_base=$(echo $finIP | cut -d. -f1-3)
+
+		if [[ $init_base != $segmento_base* ]] || [[ $fin_base != $segmento_base* ]]; then
 			echo "Error: Las IPs del rango no pertenecen al segmento $segmentoIP"
 			exit 1
 		fi
 				
 		read -p "Tiempo de concesion en segundos: (ej. 3600) " tiempo
 		read -p "Ingrese la IPv4 del Router/Gateway: " routerIP
-		validarIP $routerIP
-		if [ $res -ne 0 ]; then
+		if ! validarIP "$segmentoIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
 
-		read -p "Ingrese la IPv4 del Router/Gateway: " dnsIP
-		validarIP $dnsIP
-		if [ $res -ne 0 ]; then
+		read -p "Ingrese la IPv4 del DNS: " dnsIP
+		if ! validarIP "$segmentoIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
-
-		export segmentoIP=$segmentoIP
 				
 		sudo -E tee /etc/kea/kea-dhcp4.conf <<EOF > /dev/null
 {
@@ -78,7 +76,7 @@ case $op in
 	"subnet4": [ 
 		{
 			"id": 1,
-			"subnet": "192.168.100.0/24",
+			"subnet": "$segmentoIP/24",
 			"pools": [ { "pool": "$initIP - $finIP" } ],
 			"option-data": [
 				{ "name": "routers", "data": "$routerIP" },
