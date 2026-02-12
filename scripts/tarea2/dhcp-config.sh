@@ -67,13 +67,15 @@ case $op in
 		sudo nmcli con mod "ens192" ipv4.addresses "${ip_servidor}/${cidr}" ipv4.method manual
         sudo nmcli con up "ens192"
 
-		if [[ $init_base != $segmento_base* ]] || [[ $fin_base != $segmento_base* ]]; then
+		segmento_base=$(echo "$segmentoIP" | tr -d ' ' | cut -d. -f1-3)
+		init_base=$(echo "$initIP" | tr -d ' ' | cut -d. -f1-3)
+		fin_base=$(echo "$finIP" | tr -d ' ' | cut -d. -f1-3)
+
+		# Comparamos las cadenas exactamente
+		if [[ "$init_base" != "$segmento_base" ]] || [[ "$fin_base" != "$segmento_base" ]]; then
 			echo "Error: Las IPs del rango no pertenecen al segmento $segmentoIP"
 			exit 1
 		fi
-
-		sudo nmcli con mod "ens192" ipv4.addresses "${segmento_base}.1/${cidr}" ipv4.method manual
-		sudo nmcli con up "ens192"
 
 		read -p "Tiempo de concesion en segundos: (ej. 3600) " tiempo
 		read -p "Ingrese la IPv4 del Router/Gateway: " routerIP
