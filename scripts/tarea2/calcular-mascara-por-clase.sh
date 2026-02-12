@@ -2,17 +2,25 @@
 
 calcular-mascara(){
     local ip=$1
-    
-    # Extraer primer octeto
     local primer_octeto=$(echo $ip | cut -d. -f1)
     
+    local cidr
+    local mascara
+    
     if [ $primer_octeto -ge 1 ] && [ $primer_octeto -le 126 ]; then
-        echo "8"
+        cidr="8"
+        mascara="255.0.0.0" # Clase A
     elif [ $primer_octeto -ge 128 ] && [ $primer_octeto -le 191 ]; then
-        echo "16"
+        cidr="16"
+        mascara="255.255.0.0" # Clase B
     elif [ $primer_octeto -ge 192 ] && [ $primer_octeto -le 223 ]; then
-        echo "24"
+        cidr="24"
+        mascara="255.255.255.0" # Clase C
     else
-        echo "24"
+        cidr="24"
+        mascara="255.255.255.0" # Default
     fi
+
+    # Devolvemos ambos valores separados por un espacio para poder capturarlos
+    echo "$cidr $mascara"
 }

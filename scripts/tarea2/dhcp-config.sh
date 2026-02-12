@@ -31,8 +31,26 @@ case $op in
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
-		mascara=$(calcular-mascara $segmentoIP)
-		cidr=$(echo $mascara | awk '{print $1}')
+
+		resultado=$(calcular-mascara "$segmentoIP")
+		#Separamos los valores en variables individuales
+		cidr=$(echo $resultado | awk '{print $1}')
+		mascara=$(echo $resultado | awk '{print $2}')
+
+		#Calculamos el IP del servidor dinámicamente segun la clase
+        if [ "$cidr" -eq "8" ]; then
+            segmento_base=$(echo $segmentoIP | cut -d. -f1)
+            ip_servidor="${segmento_base}.0.0.1"
+            red_formato="${segmento_base}.0.0.0"
+        elif [ "$cidr" -eq "16" ]; then
+            segmento_base=$(echo $segmentoIP | cut -d. -f1-2)
+            ip_servidor="${segmento_base}.0.1"
+            red_formato="${segmento_base}.0.0"
+        else
+            segmento_base=$(echo $segmentoIP | cut -d. -f1-3)
+            ip_servidor="${segmento_base}.1"
+            red_formateada="${segmento_base}.0"
+        fi
 
 		read -p "Rango inicial de direcciones IPv4: (ej. 192.168.100.50) " initIP
 		if ! validarIP "$initIP" ; then
@@ -46,10 +64,8 @@ case $op in
 			exit 1
 		fi
 
-		#Validacion que las ips sean del segmento de red ingresado
-		segmento_base=$(echo $segmentoIP | cut -d. -f1-3)
-		init_base=$(echo $initIP | cut -d. -f1-3)
-		fin_base=$(echo $finIP | cut -d. -f1-3)
+		sudo nmcli con mod "ens192" ipv4.addresses "${ip_servidor}/${cidr}" ipv4.method manual
+        sudo nmcli con up "ens192"
 
 		if [[ $init_base != $segmento_base* ]] || [[ $fin_base != $segmento_base* ]]; then
 			echo "Error: Las IPs del rango no pertenecen al segmento $segmentoIP"
@@ -81,7 +97,7 @@ case $op in
 	"subnet4": [ 
 		{
 			"id": 1,
-			"subnet": "$segmentoIP/$mascara",
+			"subnet": "$segmentoIP/$cidr",
 			"pools": [ { "pool": "$initIP - $finIP" } ],
 			"option-data": [
 				{ "name": "routers", "data": "$routerIP" },
