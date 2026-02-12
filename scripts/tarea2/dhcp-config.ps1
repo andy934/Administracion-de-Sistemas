@@ -74,11 +74,11 @@ switch ($op) {
 
 		$interfaceName = "Ethernet1"
 		try {
-			New-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr -ErrorAction Stop
+			New-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr -ErrorAction Stop | Out-Null
 		}
 		catch {
 			# Si la IP ya existe, la actualizamos
-			Set-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr
+			Set-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr | Out-Null
 		}
 
 		$routerIP = Read-Host "Ingrese la IPv4 del Router/Gateway: "
