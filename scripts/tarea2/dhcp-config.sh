@@ -55,7 +55,10 @@ case $op in
 			echo "Error: Las IPs del rango no pertenecen al segmento $segmentoIP"
 			exit 1
 		fi
-				
+
+		sudo nmcli con mod "ens192" ipv4.addresses "${segmento_base}.1/${cidr}" ipv4.method manual
+		sudo nmcli con up "ens192"
+
 		read -p "Tiempo de concesion en segundos: (ej. 3600) " tiempo
 		read -p "Ingrese la IPv4 del Router/Gateway: " routerIP
 		if [[ -n "$routerIP" ]]; then
