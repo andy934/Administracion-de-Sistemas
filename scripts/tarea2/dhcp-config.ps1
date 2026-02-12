@@ -52,13 +52,23 @@ switch ($op) {
 			Write-Host "Operacion Cancelada por el usuario"
 			exit 0
 		}
-		
-		$primerOcteto = ($segmentoIP -split '\.')[0]
-		# Usamos el prefijo $script: para que persista fuera del switch
-		$script:idRedReal = "$primerOcteto.0.0.0"
+
+		#Calculamos el ID de Red Real según la clase
+		$octetos = $segmentoIP.Split('.')
+		if ($mascara -eq "255.0.0.0") {
+			$idRedReal = "$($octetos[0]).0.0.0" # Clase A
+		}
+		elseif ($mascara -eq "255.255.0.0") {
+			$idRedReal = "$($octetos[0]).$($octetos[1]).0.0" # Clase B
+		}
+		else {
+			$idRedReal = "$($octetos[0]).$($octetos[1]).$($octetos[2]).0" # Clase C
+		}
+
 		$scopeExist = Get-DhcpServerv4Scope -ScopeId $idRedReal -ErrorAction SilentlyContinue
-		if ( $scopeExist) {
-			Remove-DhcpServerv4Scope -ScopeId $idRedReal -Force
+		if ($scopeExist) {
+			Write-Host "Detectado ámbito previo en $idRedReal. Eliminando para evitar conflictos..." -ForegroundColor Yellow
+			Remove-DhcpServerv4Scope -ScopeId $idRedReal -Force | Out-Null
 		}
 
 		$initIP = Read-Host "Rango inicial de direcciones IPv4: "
