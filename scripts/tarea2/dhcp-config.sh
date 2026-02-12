@@ -32,7 +32,7 @@ case $op in
 			exit 1
 		fi
 		mascara=$(calcular-mascara $segmentoIP)
-		cidr=$(echo $resultado | awk '{print $1}')
+		cidr=$(echo $mascara | awk '{print $1}')
 
 		read -p "Rango inicial de direcciones IPv4: (ej. 192.168.100.50) " initIP
 		if ! validarIP "$initIP" ; then
