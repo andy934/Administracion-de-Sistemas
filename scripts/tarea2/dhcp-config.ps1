@@ -131,7 +131,7 @@ switch ($op) {
 		Write-Host "Ambito configurado correctamente..."
 	}
 
-	3 { diagnostico-DHCP -scopeId $script:idRedReal }
+	3 { diagnostico-DHCP }
 
 	4 { exit 0 }
 
