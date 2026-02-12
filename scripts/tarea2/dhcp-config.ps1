@@ -127,10 +127,10 @@ switch ($op) {
 			exit 1
 		}
 		
-		Write-Host "Ambito configurado cerrectamente..."
+		Write-Host "Ambito configurado correctamente..."
 	}
 
-	3 { diagnostico-DHCP }
+	3 { diagnostico-DHCP -scope $segmentoIP }
 
 	4 { exit 0 }
 
