@@ -58,15 +58,19 @@ case $op in
 				
 		read -p "Tiempo de concesion en segundos: (ej. 3600) " tiempo
 		read -p "Ingrese la IPv4 del Router/Gateway: " routerIP
-		if ! validarIP "$routerIP" ; then
-			echo "Error: La IP no cumpole con el formato de IPv4..."
-			exit 1
+		if [[ -n "$routerIP" ]]; then
+    		if ! validarIP "$routerIP"; then
+        		echo "Error: Formato de Gateway no válido."
+        		exit 1
+    		fi
 		fi
 
 		read -p "Ingrese la IPv4 del DNS: " dnsIP
-		if ! validarIP "$dnsIP" ; then
-			echo "Error: La IP no cumpole con el formato de IPv4..."
-			exit 1
+		if [[ -n "$dnsIP" ]]; then
+    		if ! validarIP "$dnsIP"; then
+        		echo "Error: Formato de DNS no válido."
+        		exit 1
+   			fi
 		fi
 				
 		sudo -E tee /etc/kea/kea-dhcp4.conf <<EOF > /dev/null
