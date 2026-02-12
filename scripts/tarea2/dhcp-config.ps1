@@ -80,6 +80,7 @@ switch ($op) {
 			# Si la IP ya existe, la actualizamos
 			Set-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr | Out-Null
 		}
+		Restart-Service DhcpServer
 
 		$routerIP = Read-Host "Ingrese la IPv4 del Router/Gateway: "
 		if ( -not [string]::IsNullOrEmpty($routerIP)) {
