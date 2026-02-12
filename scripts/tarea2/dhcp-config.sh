@@ -61,12 +61,7 @@ case $op in
 
 		read -p "Tiempo de concesion en segundos: (ej. 3600) " tiempo
 		read -p "Ingrese la IPv4 del Router/Gateway: " routerIP
-		if [[ -n "$routerIP" ]]; then
-    		if ! validarIP "$routerIP"; then
-        		echo "Error: Formato de Gateway no válido."
-        		exit 1
-    		fi
-		fi
+		
 
 		read -p "Ingrese la IPv4 del DNS: " dnsIP
 		if [[ -n "$dnsIP" ]]; then

@@ -16,7 +16,7 @@ switch ($op) {
 	1 {
 		$dhcpInstall = (Get-WindowsFeature DHCP).installed
 		
-		if ( -not $dhcpInstall){
+		if ( -not $dhcpInstall) {
 			Install-WindowsFeature -Name DHCP -IncludeManagementTools
 			Restart-Service DhcpServer
 		}
@@ -27,39 +27,43 @@ switch ($op) {
 		
 		$segmentoIP = Read-Host "Ingrese el segmento de red: "
 		$res = validar-IP -uIP $segmentoIP
-		if ( $res -eq 1){
-			Write-Host "Error: La IP noc cumple con el formato IPv4..."
+		if ( $res -eq 1) {
+			Write-Host "Error: La IP no cumple con el formato IPv4..."
 			exit 1
 		}
 		
 		#Verificar si ya existe un scope con ese Id, si lo hay eliminarlo
 		$op = Read-Host "Ya tienes un scope con ese Id, si continuas el scope que ya tenias se BORRARA. Continuar (s/n)"
-		if ($op -ieq 'n'){
+		if ($op -ieq 'n') {
 			Write-Host "Operacion Cancelada por el usuario"
 			exit 0
 		}
 		
-		$scopeExist = Get-DhcpServerv4Scope -ScopeId 192.168.100.0 -ErrorAction SilentlyContinue
-		if ( $scopeExist){
-			Remove-DhcpServerv4Scope -ScopeId 192.168.100.0 -Force
+		$scopeExist = Get-DhcpServerv4Scope -ScopeId $segmentoIP -ErrorAction SilentlyContinue
+		if ( $scopeExist) {
+			Remove-DhcpServerv4Scope -ScopeId $segmentoIP -Force
 		}
+
+		$resultado_mascara = calcular-mascara -segmentoIP $segmentoIP
+		$cidr = $resultado_mascara.CIDR
+		$mascara = $resultado_mascara.Mask
 
 		$initIP = Read-Host "Rango inicial de direcciones IPv4: "
 		$res = Validar-IP -uIP $initIP
-		if ( $res -eq 1){
+		if ( $res -eq 1) {
 			Write-Host "Error: La IP no cumple con el formato IPv4..."
 			exit 1
 		}
 
 		$finIP = Read-Host "Rango final de direcciones IPv4: "
-		$res = Validar-IP -uIP $initIP
-		if ( $res -eq 1){
+		$res = Validar-IP -uIP $finIP
+		if ( $res -eq 1) {
 			Write-Host "Error: La IP no cumple con el formato IPv4..."
 			exit 1
 		}
 
 		#Validar que las ips pertenezcan al segmento de red
-		$segmento_base =  ($segmentoIP -split '\.')[0..2] -join '.'
+		$segmento_base = ($segmentoIP -split '\.')[0..2] -join '.'
 		$init_base = ($initIP -split '\.')[0..2] -join '.'
 		$fin_base = ($finIP -split '\.')[0..2] -join '.'
 
@@ -68,35 +72,53 @@ switch ($op) {
 			exit 1
 		}
 
+		$interfaceName = "Ethernet1"
+		try {
+			New-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr -ErrorAction Stop
+		}
+		catch {
+			# Si la IP ya existe, la actualizamos
+			Set-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr
+		}
+
 		$routerIP = Read-Host "Ingrese la IPv4 del Router/Gateway: "
-		$res = Validar-IP -uIP $initIP
-		if ( $res -eq 1){
-			Write-Host "Error: La IP no cumple con el formato IPv4..."
-			exit 1
+		if ( -not [string]::IsNullOrEmpty($routerIP)) {
+			$res = Validar-IP -uIP $routerIP
+			if ( $res -eq 1) {
+				Write-Host "Error: La IP no cumple con el formato IPv4..."
+				exit 1
+			}
 		}
 
 		$dnsIP = Read-Host "Ingrese al IPv4 del DNS: "
-		$res = Validar-IP -uIP $initIP
-		if ( $res -eq 1){
-			Write-Host "Error: La IP no cumple con el formato IPv4..."
-			exit 1
+		if ( -not [string]::IsNullOrEmpty($dnsIP)) {
+			$res = Validar-IP -uIP $dnsIP
+			if ( $res -eq 1) {
+				Write-Host "Error: La IP no cumple con el formato IPv4..."
+				exit 1
+			}
 		}
 
 		$tiempo = Read-Host "Tiempo de concesion (dias.horas:minutos:segundos): "
 
 		#Proceso de aplicar la configuracion
-		$mask = "255.255.255.0"
 		try {
-		Add-DhcpServerv4Scope -Name $scope -StartRange $initIP -EndRange $finIP -SubnetMask $mask -LeaseDuration $tiempo -State Active | Out-Null
+			Add-DhcpServerv4Scope -Name $scope -StartRange $initIP -EndRange $finIP -SubnetMask $mascara -LeaseDuration $tiempo -State Active | Out-Null
 
-		Set-DhcpServerv4OptionValue -ScopeId $segmentoIP -Router $routerIP -DnsServer $dnsIP -Force | Out-Null
-
-		#Verificar si la regla del firewall ya existe
-		$firewallRule = Get-NetFirewallRule -DisplayName "DHCP-Servicio" -ErrorAction SilentlyContinue
-		if ( -not $firewallRule) {
-			New-NetFirewallRule -DisplayName "DHCP-Servicio" -Direction Inbound -Protocol UDP -LocalPort 67,68 -Action Allow | Out-Null
+			# Solo aplicamos opciones de Router/DNS si el usuario ingresó datos
+			if (-not [string]::IsNullOrEmpty($routerIP)) {
+				Set-DhcpServerv4OptionValue -ScopeId $segmentoIP -Router $routerIP -Force | Out-Null
+			}
+			if (-not [string]::IsNullOrEmpty($dnsIP)) {
+				Set-DhcpServerv4OptionValue -ScopeId $segmentoIP -DnsServer $dnsIP -Force | Out-Null
+			}
+			#Verificar si la regla del firewall ya existe
+			$firewallRule = Get-NetFirewallRule -DisplayName "DHCP-Servicio" -ErrorAction SilentlyContinue
+			if ( -not $firewallRule) {
+				New-NetFirewallRule -DisplayName "DHCP-Servicio" -Direction Inbound -Protocol UDP -LocalPort 67, 68 -Action Allow | Out-Null
+			}
 		}
-		} catch {
+		catch {
 			Write-Host "Error: Algo salio mal con la configuracion del servidor DHCP: $_"
 			exit 1
 		}
