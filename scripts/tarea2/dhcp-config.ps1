@@ -23,6 +23,13 @@ switch ($op) {
 	}
 
 	2 {
+		#Verificar si ya existe un scope con ese Id, si lo hay eliminarlo
+		$op = Read-Host "Ya tienes un scope con ese Id, si continuas el scope que ya tenias se BORRARA. Continuar (s/n)"
+		if ($op -ieq 'n') {
+			Write-Host "Operacion Cancelada por el usuario"
+			exit 0
+		}
+		
 		$scope = Read-Host "Nombre descriptivo: "
 		
 		$segmentoIP = Read-Host "Ingrese el segmento de red: "
@@ -38,19 +45,14 @@ switch ($op) {
 		$segmento_base = ($segmentoIP -split '\.')[0..2] -join '.'
 
 		$interfaceName = "Ethernet1"
+		Get-NetIPAddress -InterfaceAlias $interfaceName -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+		
 		try {
 			New-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr -ErrorAction Stop | Out-Null
 		}
 		catch {
 			# Si la IP ya existe, la actualizamos
 			Set-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr | Out-Null
-		}
-		
-		#Verificar si ya existe un scope con ese Id, si lo hay eliminarlo
-		$op = Read-Host "Ya tienes un scope con ese Id, si continuas el scope que ya tenias se BORRARA. Continuar (s/n)"
-		if ($op -ieq 'n') {
-			Write-Host "Operacion Cancelada por el usuario"
-			exit 0
 		}
 
 		#Calculamos el ID de Red Real según la clase
