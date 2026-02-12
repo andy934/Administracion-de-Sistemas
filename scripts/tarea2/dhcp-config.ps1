@@ -54,7 +54,8 @@ switch ($op) {
 		}
 		
 		$primerOcteto = ($segmentoIP -split '\.')[0]
-		$idRedReal = "$primerOcteto.0.0.0"
+		# Usamos el prefijo $script: para que persista fuera del switch
+		$script:idRedReal = "$primerOcteto.0.0.0"
 		$scopeExist = Get-DhcpServerv4Scope -ScopeId $idRedReal -ErrorAction SilentlyContinue
 		if ( $scopeExist) {
 			Remove-DhcpServerv4Scope -ScopeId $idRedReal -Force
@@ -130,7 +131,7 @@ switch ($op) {
 		Write-Host "Ambito configurado correctamente..."
 	}
 
-	3 { diagnostico-DHCP -scopeId $idRedReal }
+	3 { diagnostico-DHCP -scopeId $script:idRedReal }
 
 	4 { exit 0 }
 
