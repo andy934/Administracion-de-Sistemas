@@ -31,6 +31,20 @@ switch ($op) {
 			Write-Host "Error: La IP no cumple con el formato IPv4..."
 			exit 1
 		}
+
+		$resultado_mascara = calcular-mascara -segmentoIP $segmentoIP
+		$cidr = $resultado_mascara.CIDR
+		$mascara = $resultado_mascara.Mask
+		$segmento_base = ($segmentoIP -split '\.')[0..2] -join '.'
+
+		$interfaceName = "Ethernet1"
+		try {
+			New-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr -ErrorAction Stop | Out-Null
+		}
+		catch {
+			# Si la IP ya existe, la actualizamos
+			Set-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr | Out-Null
+		}
 		
 		#Verificar si ya existe un scope con ese Id, si lo hay eliminarlo
 		$op = Read-Host "Ya tienes un scope con ese Id, si continuas el scope que ya tenias se BORRARA. Continuar (s/n)"
@@ -45,10 +59,6 @@ switch ($op) {
 		if ( $scopeExist) {
 			Remove-DhcpServerv4Scope -ScopeId $idRedReal -Force
 		}
-
-		$resultado_mascara = calcular-mascara -segmentoIP $segmentoIP
-		$cidr = $resultado_mascara.CIDR
-		$mascara = $resultado_mascara.Mask
 
 		$initIP = Read-Host "Rango inicial de direcciones IPv4: "
 		$res = Validar-IP -uIP $initIP
@@ -65,7 +75,6 @@ switch ($op) {
 		}
 
 		#Validar que las ips pertenezcan al segmento de red
-		$segmento_base = ($segmentoIP -split '\.')[0..2] -join '.'
 		$init_base = ($initIP -split '\.')[0..2] -join '.'
 		$fin_base = ($finIP -split '\.')[0..2] -join '.'
 
@@ -73,16 +82,6 @@ switch ($op) {
 			Write-Host "Error: Las IPs del rango no pertenecen al segmento $segmentoIP..."
 			exit 1
 		}
-
-		$interfaceName = "Ethernet1"
-		try {
-			New-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr -ErrorAction Stop | Out-Null
-		}
-		catch {
-			# Si la IP ya existe, la actualizamos
-			Set-NetIPAddress -InterfaceAlias $interfaceName -IPAddress "$segmento_base.1" -PrefixLength $cidr | Out-Null
-		}
-		Restart-Service DhcpServer
 
 		$routerIP = Read-Host "Ingrese la IPv4 del Router/Gateway: "
 		if ( -not [string]::IsNullOrEmpty($routerIP)) {
@@ -120,6 +119,8 @@ switch ($op) {
 			if ( -not $firewallRule) {
 				New-NetFirewallRule -DisplayName "DHCP-Servicio" -Direction Inbound -Protocol UDP -LocalPort 67, 68 -Action Allow | Out-Null
 			}
+
+			Restart-Service DhcpServer
 		}
 		catch {
 			Write-Host "Error: Algo salio mal con la configuracion del servidor DHCP: $_"
