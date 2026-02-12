@@ -35,13 +35,13 @@ case $op in
 		cidr=$(echo $resultado | awk '{print $1}')
 
 		read -p "Rango inicial de direcciones IPv4: (ej. 192.168.100.50) " initIP
-		if ! validarIP "$segmentoIP" ; then
+		if ! validarIP "$initIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
 				
 		read -p "Rango final de direcciones IPv4: (ej. 192.168.100.150) " finIP
-		if ! validarIP "$segmentoIP" ; then
+		if ! validarIP "$finIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
@@ -58,13 +58,13 @@ case $op in
 				
 		read -p "Tiempo de concesion en segundos: (ej. 3600) " tiempo
 		read -p "Ingrese la IPv4 del Router/Gateway: " routerIP
-		if ! validarIP "$segmentoIP" ; then
+		if ! validarIP "$routerIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
 
 		read -p "Ingrese la IPv4 del DNS: " dnsIP
-		if ! validarIP "$segmentoIP" ; then
+		if ! validarIP "$dnsIP" ; then
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
