@@ -1,6 +1,7 @@
 #!/bin/bash
 . ./validadorIPv4.sh
 . ./diagnosticoDHCP.sh
+. ./calcular-mascara-por-clase.sh
 
 echo "---------------------------------------------------"
 echo "-- Opciones                                      --"
@@ -30,6 +31,8 @@ case $op in
 			echo "Error: La IP no cumpole con el formato de IPv4..."
 			exit 1
 		fi
+		mascara=$(calcular-mascara $segmentoIP)
+		cidr=$(echo $resultado | awk '{print $1}')
 
 		read -p "Rango inicial de direcciones IPv4: (ej. 192.168.100.50) " initIP
 		if ! validarIP "$segmentoIP" ; then
@@ -76,7 +79,7 @@ case $op in
 	"subnet4": [ 
 		{
 			"id": 1,
-			"subnet": "$segmentoIP/24",
+			"subnet": "$segmentoIP/$mascara",
 			"pools": [ { "pool": "$initIP - $finIP" } ],
 			"option-data": [
 				{ "name": "routers", "data": "$routerIP" },
