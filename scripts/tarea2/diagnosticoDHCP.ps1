@@ -8,19 +8,19 @@ function diagnostico-DHCP {
 	
 	$scopes = Get-DhcpServerv4Scope -ErrorAction SilentlyContinue
 	if ($null -eq $scopes) {
-		Write-Host "No se encontraron ámbitos configurados en el sistema."
+		Write-Host "No se encontraron ambitos configurados en el sistema."
 	}
 	else {
 		foreach ($s in $scopes) {
-			Write-Host "`n--- Ámbito: $($s.Name) ($($s.ScopeId)) ---"
-			# 3. Pedimos las concesiones de cada ámbito encontrado
+			Write-Host "`n--- Ambito: $($s.Name) ($($s.ScopeId)) ---"
+			# 3. Pedimos las concesiones de cada ambito encontrado
 			$leases = Get-DhcpServerv4Lease -ScopeId $s.ScopeId -ErrorAction SilentlyContinue
             
 			if ($null -ne $leases) {
 				$leases | Select-Object IPAddress, ClientId, HostName, LeaseExpiryTime | Format-Table -AutoSize
 			}
 			else {
-				Write-Host "No hay equipos conectados en este ámbito."
+				Write-Host "No hay equipos conectados en este ambito."
 			}
 		}
 	}
