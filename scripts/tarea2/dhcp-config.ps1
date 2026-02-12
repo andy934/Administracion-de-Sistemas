@@ -39,9 +39,11 @@ switch ($op) {
 			exit 0
 		}
 		
-		$scopeExist = Get-DhcpServerv4Scope -ScopeId $segmentoIP -ErrorAction SilentlyContinue
+		$primerOcteto = ($segmentoIP -split '\.')[0]
+		$idRedReal = "$primerOcteto.0.0.0"
+		$scopeExist = Get-DhcpServerv4Scope -ScopeId $idRedReal -ErrorAction SilentlyContinue
 		if ( $scopeExist) {
-			Remove-DhcpServerv4Scope -ScopeId $segmentoIP -Force
+			Remove-DhcpServerv4Scope -ScopeId $idRedReal -Force
 		}
 
 		$resultado_mascara = calcular-mascara -segmentoIP $segmentoIP
