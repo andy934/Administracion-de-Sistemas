@@ -21,8 +21,8 @@ case $op in
         fi
 		;;
     2)
-        systemctl is-active named > /dev/null 2>&1 && 
-        echo "[ OK ] El servidor DNS está activo." || echo "[ ERROR ] El servidor DNS no está activo."
+        systemctl is-active named > /dev/null 2>&1 && echo "[ OK ] El servidor DNS está activo." || echo "[ ERROR ] El servidor DNS no está activo."
+        systemctl is-enabled named > /dev/null 2>&1 && echo "[ OK ] El servidor DNS está habilitado." || echo "[ ERROR ] El servidor DNS no está habilitado."
         ;;
     3)
 
