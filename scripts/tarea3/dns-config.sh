@@ -3,9 +3,10 @@
 echo "---------------------------------------------------"
 echo "-- Opciones                                      --"
 echo "-- 1. Instalar Servidor                          --"
-echo "-- 2. Configuracion                              --"
-echo "-- 3. Lista de Concesiones y Estado del Servidor --"
-echo "-- 4.Salir                                       --"
+echo "-- 2. Estado del Servidor                        --"
+echo "-- 3. Configuracion                              --"
+echo "-- 4. Lista de Concesiones y Estado del Servidor --"
+echo "-- 5.Salir                                       --"
 echo "---------------------------------------------------"
 
 read -p "Seleccione una opcion: " op
@@ -19,6 +20,10 @@ case $op in
             echo "[ OK ] bind ya está instalado."
         fi
 		;;
+    2)
+        systemctl is-active named > /dev/null 2>&1 && 
+        echo "[ OK ] El servidor DNS está activo." || echo "[ ERROR ] El servidor DNS no está activo."
+        ;;
 	4)
 		exit 1 ;;
 esac
