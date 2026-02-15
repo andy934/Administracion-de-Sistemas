@@ -13,11 +13,11 @@ read -p "Seleccione una opcion: " op
 
 case $op in
 	1)
-        if ! rpm -q bind > /dev/null 2>&1; then
-            sudo dnf -y install -q bind  bind-utils > /dev/null 2>&1
-            echo "[ OK ] bind se ha instalado correctamente."
-        else
+        if rpm -q bind > /dev/null 2>&1; then
             echo "[ OK ] bind ya está instalado."
+        else
+            sudo dnf -y install -q bind bind-utils > /dev/null 2>&1
+            echo "[ OK ] bind se ha instalado correctamente."
         fi
 		;;
     2)
