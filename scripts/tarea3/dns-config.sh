@@ -17,7 +17,12 @@ case $op in
             echo "[ OK ] bind ya está instalado."
         else
             sudo dnf -y install -q bind bind-utils > /dev/null 2>&1
-            echo "[ OK ] bind se ha instalado correctamente."
+            if [ $? -eq 0 ]; then
+                echo "[OK] BIND se ha instalado correctamente"
+            else
+                echo "[ERROR] Fallo en la instalacion de BIND"
+                exit 1
+            fi
         fi
 		;;
     2)
