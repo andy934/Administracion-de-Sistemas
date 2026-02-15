@@ -14,7 +14,7 @@ read -p "Seleccione una opcion: " op
 case $op in
 	1)
         if ! rpm -q bind > /dev/null 2>&1; then
-            sudo dnf -y install -q bind  bind-utils > /dev/null 2>&1
+            sudo dnf -y install bind  bind-utils > /dev/null 2>&1
             echo "[ OK ] bind se ha instalado correctamente."
         else
             echo "[ OK ] bind ya está instalado."
@@ -24,6 +24,9 @@ case $op in
         systemctl is-active named > /dev/null 2>&1 && 
         echo "[ OK ] El servidor DNS está activo." || echo "[ ERROR ] El servidor DNS no está activo."
         ;;
-	4)
+    3)
+
+        ;;
+	5)
 		exit 1 ;;
 esac
