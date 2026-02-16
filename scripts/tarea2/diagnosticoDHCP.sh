@@ -14,15 +14,13 @@ diagnosticoDHCP(){
 
 	#listado de concesiones
 	echo -e "\nEquipos conectados actualmente:"
-    
-    # Kea suele guardar las concesiones en un archivo .csv o .db
-    # Usamos /var/lib/kea/kea-leases4.csv que es el estándar
+
     local archivo_leases="/var/lib/kea/kea-leases4.csv"
 
     if sudo test -f "$archivo_leases" ; then
         # Verificamos si el archivo tiene más que solo el encabezado
 		local concesiones=$(sudo grep -c -v "^address,hwaddr" "$archivo_leases" 2>/dev/null)
-        if [ "$concesiones" -eq 0 ]; then
+        if [ "$concesiones" -gt 0 ]; then
             # Formateamos la salida: 
             # address, hwaddr, client_id, valid_lifetime, expire, subnet_id
             echo "IP_ADDRESS      MAC_ADDRESS         EXPIRACION"
@@ -37,4 +35,4 @@ diagnosticoDHCP(){
 }
 
 
-#diagnosticoDHCP
+diagnosticoDHCP
