@@ -127,6 +127,99 @@ EOF
         echo "Archivo de zona: /var/named/${dominio}.db"
         echo "=========================================="
         ;;
+    3)
+        # Configurar Zona Inversa
+        echo ""
+        echo "=== CONFIGURACION DE ZONA INVERSA ==="
+        echo ""
+        
+        read -p "Nombre del dominio: " dominio
+        read -p "Segmento de red (ej. 192.168.1): " segmento
+        read -p "IP del servidor DNS: " ip_dns
+        read -p "Email del administrador: " email_admin
+        
+        # Extraer octetos para zona inversa
+        IFS='.' read -r octeto1 octeto2 octeto3 <<< "$segmento"
+        zona_inversa="${octeto3}.${octeto2}.${octeto1}.in-addr.arpa"
+        ultimo_octeto=$(echo $ip_dns | cut -d. -f4)
+        
+        # Generar serial
+        serial=$(date +%Y%m%d)01
+        
+        echo "[INFO] Generando archivo de zona inversa..."
+        
+        # CREAR archivo de zona inversa usando plantilla cat <<EOF
+        sudo tee /var/named/${dominio}.rev > /dev/null <<EOF
+\$TTL 86400
+@   IN  SOA dns-primary.${dominio}. ${email_admin}.${dominio}. (
+            ${serial}      ; Serial
+            3600           ; Refresh
+            1800           ; Retry
+            604800         ; Expire
+            86400 )        ; Minimum TTL
+
+; Name Server Information
+@       IN  NS      dns-primary.${dominio}.
+
+; PTR Record for Name Server
+${ultimo_octeto}    IN  PTR     dns-primary.${dominio}.
+EOF
+        
+        # Establecer permisos
+        sudo chown named:named /var/named/${dominio}.rev
+        sudo chmod 640 /var/named/${dominio}.rev
+        
+        echo "[OK] Archivo de zona inversa creado: /var/named/${dominio}.rev"
+        
+        # AGREGAR zona inversa a /etc/named.conf
+        echo "[INFO] Agregando zona inversa a /etc/named.conf..."
+        
+        if sudo grep -q "zone \"${zona_inversa}\"" /etc/named.conf; then
+            echo "[ADVERTENCIA] La zona inversa ya existe en named.conf"
+        else
+            sudo tee -a /etc/named.conf > /dev/null <<EOF
+
+// Reverse Zone for ${segmento}.0/24
+zone "${zona_inversa}" IN {
+    type master;
+    file "${dominio}.rev";
+    allow-update { none; };
+    allow-query { any; };
+};
+EOF
+            echo "[OK] Zona inversa agregada a /etc/named.conf"
+        fi
+        
+        # Verificar configuracion
+        echo "[INFO] Verificando configuracion..."
+        if sudo named-checkconf; then
+            echo "[OK] Configuracion correcta"
+        else
+            echo "[ERROR] Hay errores en named.conf"
+            exit 1
+        fi
+        
+        if sudo named-checkzone ${zona_inversa} /var/named/${dominio}.rev > /dev/null 2>&1; then
+            echo "[OK] Archivo de zona inversa correcto"
+        else
+            echo "[ERROR] Hay errores en el archivo de zona inversa"
+            sudo named-checkzone ${zona_inversa} /var/named/${dominio}.rev
+            exit 1
+        fi
+        
+        # Reiniciar servicio
+        sudo systemctl restart named
+        echo "[OK] Servidor DNS reiniciado"
+        echo ""
+        echo "=========================================="
+        echo "ZONA INVERSA CONFIGURADA:"
+        echo "=========================================="
+        echo "Red: ${segmento}.0/24"
+        echo "Zona: ${zona_inversa}"
+        echo "Archivo: /var/named/${dominio}.rev"
+        echo "=========================================="
+        ;;
+	
     6)
         # Ver estado del servidor
         echo ""
