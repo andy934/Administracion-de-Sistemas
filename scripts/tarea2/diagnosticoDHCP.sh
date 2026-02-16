@@ -21,9 +21,8 @@ diagnosticoDHCP(){
 
     if sudo test -f "$archivo_leases" ; then
         # Verificamos si el archivo tiene más que solo el encabezado
-		local total_lineas=$(sudo cat "$archivo_leases" 2>/dev/null | wc -l)
-        local concesiones=$((total_lineas - 1))  # Restar encabezado
-        if [ "$concesiones" -lt 1 ]; then
+		local concesiones=$(sudo grep -c -v "^address,hwaddr" "$archivo_leases" 2>/dev/null)
+        if [ "$concesiones" -eq 0 ]; then
             # Formateamos la salida: 
             # address, hwaddr, client_id, valid_lifetime, expire, subnet_id
             echo "IP_ADDRESS      MAC_ADDRESS         EXPIRACION"
