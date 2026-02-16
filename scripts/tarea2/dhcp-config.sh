@@ -64,6 +64,19 @@ case $op in
 			exit 1
 		fi
 
+		ultimo_octeto_srv=$(echo "$ip_servidor" | cut -d. -f4)
+		ultimo_octeto_init=$(echo "$initIP" | cut -d. -f4)
+
+		# Si son iguales, sumamos 1 automáticamente a la IP inicial
+		if [ "$ultimo_octeto_srv" -eq "$ultimo_octeto_init" ]; then
+			echo "Aviso: La IP inicial coincide con el servidor. Ajustando automáticamente a uno más..."
+			
+			# Reconstruimos la IP sumando 1 al último octeto
+			prefijo_init=$(echo "$initIP" | cut -d. -f1-3)
+			nuevo_octeto=$((ultimo_octeto_init + 1))
+			initIP="${prefijo_init}.${nuevo_octeto}"
+		fi
+
 		sudo nmcli con mod "ens192" ipv4.addresses "${ip_servidor}/${cidr}" ipv4.method manual
         sudo nmcli con up "ens192"
 
