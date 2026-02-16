@@ -19,14 +19,15 @@ diagnosticoDHCP(){
     # Usamos /var/lib/kea/kea-leases4.csv que es el estándar
     local archivo_leases="/var/lib/kea/kea-leases4.csv"
 
-    if [ -f "$archivo_leases" ]; then
+    if sudo [ -f "$archivo_leases" ]; then
         # Verificamos si el archivo tiene más que solo el encabezado
-        if [ $(wc -l < "$archivo_leases") -gt 1 ]; then
+		local conteo=$(sudo wc -l < "$archivo_leases")
+        if [ "$conteo" -gt 1 ]; then
             # Formateamos la salida: 
             # address, hwaddr, client_id, valid_lifetime, expire, subnet_id
             echo "IP_ADDRESS      MAC_ADDRESS         EXPIRACION"
             echo "----------------------------------------------------"
-            awk -F, 'NR>1 {print $1 "    " $2 "    " $5}' "$archivo_leases" | column -t
+            sudo awk -F, 'NR>1 {print $1 "    " $2 "    " $5}' "$archivo_leases" | column -t
         else
             echo "No hay concesiones activas en la base de datos."
         fi
