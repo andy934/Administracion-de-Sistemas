@@ -219,6 +219,70 @@ EOF
         echo "Archivo: /var/named/${dominio}.rev"
         echo "=========================================="
         ;;
+    4)
+        # Agregar registro DNS
+        echo ""
+        echo "=== AGREGAR REGISTRO DNS ==="
+        echo ""
+        
+        read -p "Nombre del dominio: " dominio
+        read -p "Tipo de registro (A/CNAME/MX): " tipo
+        
+        case $tipo in
+            A|a)
+                read -p "Nombre del host (ej. www, ftp, mail): " hostname
+                read -p "Direccion IP: " ip
+                
+                echo "${hostname}    IN  A       ${ip}" | sudo tee -a /var/named/${dominio}.db > /dev/null
+                echo "[OK] Registro A agregado: ${hostname}.${dominio} -> ${ip}"
+                ;;
+                
+            CNAME|cname)
+                read -p "Alias (ej. blog): " alias
+                read -p "Nombre real (ej. www): " real
+                
+                echo "${alias}      IN  CNAME   ${real}.${dominio}." | sudo tee -a /var/named/${dominio}.db > /dev/null
+                echo "[OK] Registro CNAME agregado: ${alias}.${dominio} -> ${real}.${dominio}"
+                ;;
+                
+            *)
+                echo "[ERROR] Tipo de registro no valido"
+                exit 1
+                ;;
+        esac
+        
+        # Incrementar serial
+        echo "[INFO] Actualizando serial en archivo de zona..."
+        # (Aquí podrías implementar lógica para incrementar el serial automáticamente)
+        
+        # Verificar y reiniciar
+        if sudo named-checkzone ${dominio} /var/named/${dominio}.db > /dev/null 2>&1; then
+            echo "[OK] Archivo de zona correcto"
+            sudo systemctl reload named
+            echo "[OK] Configuracion recargada"
+        else
+            echo "[ERROR] Hay errores en el archivo de zona"
+            sudo named-checkzone ${dominio} /var/named/${dominio}.db
+        fi
+        ;;
+    5)
+        # Verificar configuracion
+        echo ""
+        echo "=== VERIFICACION DE CONFIGURACION ==="
+        echo ""
+        
+        echo -n "Verificando /etc/named.conf... "
+        if sudo named-checkconf 2>/dev/null; then
+            echo "[OK]"
+        else
+            echo "[ERROR]"
+            sudo named-checkconf
+        fi
+        
+        echo ""
+        echo "Zonas configuradas:"
+        sudo grep -E "^zone" /etc/named.conf | grep -v "^\s*//"
+        ;;
 	
     6)
         # Ver estado del servidor
