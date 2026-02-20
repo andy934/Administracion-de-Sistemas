@@ -21,7 +21,7 @@ switch ($op) {
     2 {
         Write-Host "`n=== CONFIGURACION DE ZONA DIRECTA ==="
         $dominio = Read-Host "Nombre del dominio (ej. reprobados.com)"
-        $ip_destino = Read-Host "IP a la que resolverá el dominio (ej. 192.168.100.1)"
+        $ip_destino = Read-Host "IP a la que resolvera el dominio (ej. 192.168.100.1)"
 
         Write-Host "[INFO] Creando zona primaria local..."
         # Eliminamos -ReplicationScope y agregamos -ZoneFile para modo local
