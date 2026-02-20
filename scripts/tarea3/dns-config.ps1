@@ -15,7 +15,7 @@ switch ($op) {
     1 {
         Write-Host "[INSTALANDO] Rol de DNS..." 
         Install-WindowsFeature DNS -IncludeManagementTools
-        Write-Host "[OK] DNS instalado correctamente." n
+        Write-Host "[OK] DNS instalado correctamente." 
     }
 
     2 {
@@ -51,7 +51,7 @@ switch ($op) {
         $dominio = Read-Host "Nombre del dominio a eliminar"
         
         Remove-DnsServerZone -Name $dominio -Force
-        Write-Host "[OK] Dominio $dominio eliminado correctamente."
+        Write-Host "[OK] Dominio $dominio eliminado correctamente." 
     }
 
     5 {
