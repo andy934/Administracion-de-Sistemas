@@ -17,7 +17,7 @@ case $op in
         ;;
     2)
         echo "Verificando el estado del servicio SSH..."
-        sudo systemctl status ssh
+        sudo systemctl status sshd
         ;;
     3)
         exit 0
