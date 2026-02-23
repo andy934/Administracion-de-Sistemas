@@ -10,18 +10,18 @@ $op = Read-Host "Elija una opcion: "
 switch ($op) {
     1 {
         Write-Host "Instalando SSH..."
-        # Install the OpenSSH Client
+        #OpenSSH Client
         Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
 
-        # Install the OpenSSH Server
+        #OpenSSH Server
         Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
-        # Start the sshd service
+        #Iniciar sshd service
         Start-Service sshd
 
-        # OPTIONAL but recommended:
+        #Que inicie en automatico el servicio sshd
         Set-Service -Name sshd -StartupType 'Automatic'
 
-        # Confirm the Firewall rule is configured. It should be created automatically by setup. Run the following to verify
+        #Regla del firewall para permitir conexiones SSH 
         if (!(Get-NetFirewallRule -Name "OpenSSH-Server-In-TCP" -ErrorAction SilentlyContinue)) {
             New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
         }
