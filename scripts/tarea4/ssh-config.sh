@@ -16,7 +16,7 @@ case $op in
             echo "[ ! ] SSH ya está instalado."
             exit 0
         fi
-        sudo dnf install openssh-server -y > /dev/null 2>&1
+        sudo dnf install openssh-server openssh-server openssh-clients -y > /dev/null 2>&1
         echo "SSH instalado correctamente."
         sudo systemctl enable sshd
         sudo systemctl start sshd
