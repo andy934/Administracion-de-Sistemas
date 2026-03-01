@@ -234,7 +234,6 @@ function listar_usuarios_ftp() {
     if [ ! -f /etc/vsftpd/user_list ]; then
         echo "No hay usuarios FTP registrados."
         echo "[INFO] El archivo /etc/vsftpd/user_list no existe aún."
-        echo "Esto es normal si no has creado ningún usuario todavía."
         return 0
     fi
     
@@ -244,34 +243,49 @@ function listar_usuarios_ftp() {
         return 0
     fi
     
-    # Verificar permisos de lectura
-    if [ ! -r /etc/vsftpd/user_list ]; then
-        echo "[ERROR] No se tienen permisos para leer /etc/vsftpd/user_list"
-        echo "Ejecute: sudo chmod 644 /etc/vsftpd/user_list"
-        return 1
-    fi
-    
-    echo "╔════════════════╦═══════════════╦════════════════════════════════╗"
-    echo "║ Usuario        ║ Grupo         ║ Directorio Personal            ║"
-    echo "╠════════════════╬═══════════════╬════════════════════════════════╣"
+    echo "╔══════════════════╦══════════════════╦═══════════════════════════════════╗"
+    echo "║ Usuario          ║ Grupo            ║ Directorio Personal               ║"
+    echo "╠══════════════════╬══════════════════╬═══════════════════════════════════╣"
     
     while IFS= read -r usuario; do
-        # Ignorar líneas vacías
+        # Ignorar líneas vacías y comentarios
         [ -z "$usuario" ] && continue
+        [[ "$usuario" =~ ^#.* ]] && continue
         
+        # Verificar que el usuario existe en el sistema
         if id "$usuario" &>/dev/null; then
             grupo=$(id -gn $usuario)
-            dir="/srv/ftp/usuarios/$usuario"
-            printf "║ %-14s ║ %-13s ║ %-30s ║\n" "$usuario" "$grupo" "$dir"
+            
+            # FILTRAR: Solo mostrar usuarios de grupos reprobados o recursadores
+            if [ "$grupo" == "reprobados" ] || [ "$grupo" == "recursadores" ]; then
+                dir="/srv/ftp/usuarios/$usuario"
+                printf "║ %-16s ║ %-16s ║ %-33s ║\n" "$usuario" "$grupo" "$dir"
+            fi
         fi
     done < <(sudo cat /etc/vsftpd/user_list 2>/dev/null)
     
-    echo "╚════════════════╩═══════════════╩════════════════════════════════╝"
+    echo "╚══════════════════╩══════════════════╩═══════════════════════════════════╝"
     echo ""
     
-    # Contar usuarios
-    total=$(sudo wc -l < /etc/vsftpd/user_list 2>/dev/null || echo 0)
+    # Contar solo usuarios de los grupos FTP
+    total=0
+    while IFS= read -r usuario; do
+        [ -z "$usuario" ] && continue
+        [[ "$usuario" =~ ^#.* ]] && continue
+        if id "$usuario" &>/dev/null; then
+            grupo=$(id -gn $usuario)
+            if [ "$grupo" == "reprobados" ] || [ "$grupo" == "recursadores" ]; then
+                ((total++))
+            fi
+        fi
+    done < <(sudo cat /etc/vsftpd/user_list 2>/dev/null)
+    
     echo "Total de usuarios FTP: $total"
+    echo ""
+    echo "Grupos disponibles:"
+    echo "  • reprobados: $(getent group reprobados | cut -d: -f4 | tr ',' ' ')"
+    echo "  • recursadores: $(getent group recursadores | cut -d: -f4 | tr ',' ' ')"
+
 }
 
 # Función para ver permisos de un usuario específico
