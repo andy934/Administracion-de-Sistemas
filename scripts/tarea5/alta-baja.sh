@@ -230,9 +230,25 @@ function listar_usuarios_ftp() {
     echo "=== USUARIOS FTP REGISTRADOS ==="
     echo ""
     
-    if [ ! -f /etc/vsftpd/user_list ] || [ ! -s /etc/vsftpd/user_list ]; then
+    # Verificar si el archivo existe
+    if [ ! -f /etc/vsftpd/user_list ]; then
+        echo "No hay usuarios FTP registrados."
+        echo "[INFO] El archivo /etc/vsftpd/user_list no existe aún."
+        echo "Esto es normal si no has creado ningún usuario todavía."
+        return 0
+    fi
+    
+    # Verificar si el archivo está vacío
+    if [ ! -s /etc/vsftpd/user_list ]; then
         echo "No hay usuarios FTP registrados."
         return 0
+    fi
+    
+    # Verificar permisos de lectura
+    if [ ! -r /etc/vsftpd/user_list ]; then
+        echo "[ERROR] No se tienen permisos para leer /etc/vsftpd/user_list"
+        echo "Ejecute: sudo chmod 644 /etc/vsftpd/user_list"
+        return 1
     fi
     
     echo "╔════════════════╦═══════════════╦════════════════════════════════╗"
@@ -240,18 +256,21 @@ function listar_usuarios_ftp() {
     echo "╠════════════════╬═══════════════╬════════════════════════════════╣"
     
     while IFS= read -r usuario; do
+        # Ignorar líneas vacías
+        [ -z "$usuario" ] && continue
+        
         if id "$usuario" &>/dev/null; then
             grupo=$(id -gn $usuario)
             dir="/srv/ftp/usuarios/$usuario"
             printf "║ %-14s ║ %-13s ║ %-30s ║\n" "$usuario" "$grupo" "$dir"
         fi
-    done < /etc/vsftpd/user_list
+    done < <(sudo cat /etc/vsftpd/user_list 2>/dev/null)
     
     echo "╚════════════════╩═══════════════╩════════════════════════════════╝"
     echo ""
     
     # Contar usuarios
-    total=$(wc -l < /etc/vsftpd/user_list 2>/dev/null || echo 0)
+    total=$(sudo wc -l < /etc/vsftpd/user_list 2>/dev/null || echo 0)
     echo "Total de usuarios FTP: $total"
 }
 
