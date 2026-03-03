@@ -85,7 +85,7 @@ function alta_usuario() {
     echo "[INFO] Creando usuario '$usuario' en el grupo '$grupo'..."
     
     # Crear usuario del sistema
-    sudo useradd -m -d /home/$usuario -s /bin/bash -G $grupo $usuario
+    sudo useradd -m -d /home/$usuario -s /bin/bash -g $grupo $usuario
     
     # Establecer contraseña
     echo "$usuario:$password" | sudo chpasswd

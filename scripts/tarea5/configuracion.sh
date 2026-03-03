@@ -62,7 +62,7 @@ function crear_estructura_directorios() {
 
 # Función para configurar vsftpd.conf
 function configurar_vsftpd() {
-    echo "[INFO] Configurando /etc/vsftpd/vsftpd.conf..."
+    echo "[INFO] Configurando vsftpd.conf..."
     
     # Backup del archivo original
     if [ -f /etc/vsftpd/vsftpd.conf ]; then
