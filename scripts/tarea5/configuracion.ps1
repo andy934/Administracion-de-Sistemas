@@ -32,7 +32,6 @@ function Instalar-IIS-FTP {
     Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    # Idempotencia: verificar si ya esta instalado
     $ftpInstalado = Get-WindowsFeature -Name "Web-Ftp-Server" |
                     Where-Object { $_.InstallState -eq "Installed" }
 
@@ -97,20 +96,31 @@ function Crear-Estructura-Directorios {
     # Crear grupos locales si no existen
     foreach ($grupo in $GRUPOS) {
         if (-not (Get-LocalGroup -Name $grupo -ErrorAction SilentlyContinue)) {
-            New-LocalGroup -Name $grupo -Description "Grupo FTP $grupo"
+            New-LocalGroup -Name $grupo -Description "Grupo FTP $grupo" | Out-Null
             Write-Host "[OK] Grupo '$grupo' creado." -ForegroundColor Green
         } else {
             Write-Host "[INFO] Grupo '$grupo' ya existe."
         }
     }
 
-    # Permisos NTFS
-    # general: Everyone lectura, Authenticated Users escritura
-    Establecer-Permisos-NTFS "$FTP_ROOT\general"     "Everyone"             "ReadAndExecute"
-    Establecer-Permisos-NTFS "$FTP_ROOT\general"     "Authenticated Users"  "Modify"
-    # carpetas de grupo: solo el grupo escribe
-    Establecer-Permisos-NTFS "$FTP_ROOT\reprobados"  "reprobados"           "Modify"
-    Establecer-Permisos-NTFS "$FTP_ROOT\recursadores" "recursadores"        "Modify"
+    # ── FIX 1: Nombres de cuentas usando Well-Known SIDs ─────────────────────
+    # "Everyone" y "Authenticated Users" son nombres en ingles.
+    # En Windows en espanol son "Todos" y "Usuarios autenticados".
+    # Traducimos los SIDs universales al nombre local del sistema operativo
+    # para que funcione en cualquier idioma.
+    # ─────────────────────────────────────────────────────────────────────────
+    $cuentaTodos        = (New-Object System.Security.Principal.SecurityIdentifier("S-1-1-0")).`
+                           Translate([System.Security.Principal.NTAccount]).Value
+    $cuentaAutenticados = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-11")).`
+                           Translate([System.Security.Principal.NTAccount]).Value
+
+    Write-Host "[INFO] Cuenta 'Todos': $cuentaTodos"
+    Write-Host "[INFO] Cuenta 'Autenticados': $cuentaAutenticados"
+
+    Establecer-Permisos-NTFS "$FTP_ROOT\general"      $cuentaTodos        "ReadAndExecute"
+    Establecer-Permisos-NTFS "$FTP_ROOT\general"      $cuentaAutenticados "Modify"
+    Establecer-Permisos-NTFS "$FTP_ROOT\reprobados"   "reprobados"        "Modify"
+    Establecer-Permisos-NTFS "$FTP_ROOT\recursadores" "recursadores"      "Modify"
 
     Write-Host "[OK] Estructura de directorios y permisos NTFS configurados." -ForegroundColor Green
 }
@@ -174,22 +184,36 @@ function Crear-Sitio-FTP {
     Set-WebConfigurationProperty -Filter "system.ftpServer/firewallSupport" `
         -Name "highDataChannelPort" -Value 40100 -PSPath "IIS:\"
 
-    # Reglas de autorizacion FTP
-    Clear-WebConfiguration `
-        -Filter "system.ftpServer/security/authorization" `
-        -PSPath "IIS:\Sites\$SITE_NAME" -ErrorAction SilentlyContinue
+    # ── FIX 2 y 3: Desbloquear seccion de autorizacion FTP ───────────────────
+    # La seccion "system.ftpServer/security/authorization" esta bloqueada
+    # por defecto en applicationHost.config (overrideModeDefault="Deny").
+    # Clear-WebConfiguration y Add-WebConfiguration fallan con 0x80070021
+    # porque no pueden escribir en una seccion bloqueada a nivel de sitio.
+    # Solucion: usar appcmd.exe para desbloquear la seccion globalmente
+    # y luego escribir las reglas directamente en applicationHost.config
+    # a nivel de servidor (no de sitio), que es donde tiene permisos.
+    # ─────────────────────────────────────────────────────────────────────────
+    $appcmd = "$env:windir\system32\inetsrv\appcmd.exe"
 
-    # Anonimo: solo lectura
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
-        -PSPath "IIS:\Sites\$SITE_NAME" `
-        -Value @{ accessType = "Allow"; users = ""; roles = ""; permissions = "Read" }
+    # Desbloquear la seccion para que pueda ser configurada a nivel de sitio
+    & $appcmd unlock config -section:"system.ftpServer/security/authorization" | Out-Null
 
-    # Autenticados: lectura + escritura
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
-        -PSPath "IIS:\Sites\$SITE_NAME" `
-        -Value @{ accessType = "Allow"; users = "*"; roles = ""; permissions = "Read, Write" }
+    # Limpiar reglas previas del sitio con appcmd (evita el error de bloqueo)
+    & $appcmd clear config "$SITE_NAME" /section:"system.ftpServer/security/authorization" 2>$null | Out-Null
 
-    # Aislamiento de usuarios: cada usuario ve solo su carpeta en LocalUser\$usuario
+    # Regla 1: anonymous — solo lectura (accessType=Allow, users="" = anonimo, permissions=1=Read)
+    & $appcmd set config "$SITE_NAME" `
+        /section:"system.ftpServer/security/authorization" `
+        /+"[accessType='Allow',users='',roles='',permissions='Read']" | Out-Null
+
+    # Regla 2: usuarios autenticados — lectura + escritura (permissions=3=Read+Write)
+    & $appcmd set config "$SITE_NAME" `
+        /section:"system.ftpServer/security/authorization" `
+        /+"[accessType='Allow',users='*',roles='',permissions='Read, Write']" | Out-Null
+
+    Write-Host "[OK] Reglas de autorizacion FTP configuradas." -ForegroundColor Green
+
+    # Aislamiento de usuarios: cada usuario ve solo LocalUser\$usuario como raiz
     Set-ItemProperty "IIS:\Sites\$SITE_NAME" `
         -Name ftpServer.userIsolation.mode -Value 3
 

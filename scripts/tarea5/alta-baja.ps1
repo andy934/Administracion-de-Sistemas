@@ -110,10 +110,10 @@ function Alta-Usuario {
     Write-Host "  Directorio: $userRoot"
     Write-Host ""
     Write-Host "  Estructura visible al conectar por FTP:"
-    Write-Host "    /          (raiz — solo lectura)"
-    Write-Host "    /general   (lectura/escritura — todos)"
-    Write-Host "    /$grupo    (lectura/escritura — grupo $grupo)"
-    Write-Host "    /$usuario  (lectura/escritura — solo $usuario)"
+    Write-Host "    /          (raiz - solo lectura)"
+    Write-Host "    /general   (lectura/escritura - todos)"
+    Write-Host "    /$grupo    (lectura/escritura - grupo $grupo)"
+    Write-Host "    /$usuario  (lectura/escritura - solo $usuario)"
     Write-Host "==========================================" -ForegroundColor Green
 }
 
