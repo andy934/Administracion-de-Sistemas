@@ -77,38 +77,38 @@ function alta_usuario() {
     echo ""
     echo "[INFO] Creando usuario '$usuario' en el grupo '$grupo'..."
 
-    # Crear usuario del sistema con grupo primario correcto
+    # Crear usuario con grupo primario correcto
     sudo useradd -m -d /home/$usuario -s /bin/bash -g $grupo $usuario
 
     # Establecer contraseña
     echo "$usuario:$password" | sudo chpasswd
 
-    # ── CORRECCIÓN DE ESTRUCTURA DE DIRECTORIOS ───────────────────────────────
+    # ── ESTRUCTURA DE DIRECTORIOS CHROOT ─────────────────────────────────────
     # Con local_root=/srv/ftp/$USER y chroot_local_user=YES, vsftpd hace
-    # chroot al directorio /srv/ftp/$usuario y el usuario lo ve como su "/".
-    # REGLA: ese directorio raíz del chroot NO puede ser escribible por el
-    # usuario (vsftpd lo rechaza). Debe pertenecer a root:root con perms 755.
-    # Las carpetas donde el usuario SÍ tiene escritura van DENTRO de él.
+    # chroot a /srv/ftp/$usuario — el usuario lo ve como su raíz "/".
     #
-    # Estructura resultante que ve el usuario al conectar por FTP:
-    #   /              ← chroot raíz, propiedad root:root 755 (solo lectura)
-    #   /general       ← enlace/bind al directorio general  (rw para todos)
-    #   /reprobados    ← enlace/bind al directorio de grupo  (rw para el grupo)
-    #   /nombre_usuario← directorio personal                 (rw solo para él)
+    # REGLA: la raíz del chroot debe ser root:root 755 (NO escribible por
+    # el usuario), de lo contrario vsftpd rechaza el login con 500 OOPS.
+    # Las carpetas donde el usuario escribe van DENTRO de esa raíz.
+    #
+    # Vista del usuario al conectar por FTP:
+    #   /                → raíz chroot  (root:root 755 — solo lectura)
+    #   /general         → bind mount a /srv/ftp/general  (rw para todos)
+    #   /reprobados      → bind mount a /srv/ftp/reprobados (rw para el grupo)
+    #   /usuario         → carpeta personal                (rw solo para él)
     # ─────────────────────────────────────────────────────────────────────────
 
-    # 1. Directorio raíz del chroot: propiedad root, NO escribible por el usuario
+    # 1. Raíz del chroot: root:root 755
     sudo mkdir -p /srv/ftp/$usuario
     sudo chown root:root /srv/ftp/$usuario
     sudo chmod 755 /srv/ftp/$usuario
 
-    # 2. Carpeta personal dentro del chroot (aquí sí puede escribir)
+    # 2. Carpeta personal (escribible por el usuario)
     sudo mkdir -p /srv/ftp/$usuario/$usuario
     sudo chown $usuario:$grupo /srv/ftp/$usuario/$usuario
     sudo chmod 770 /srv/ftp/$usuario/$usuario
 
-    # 3. Subdirectorio general dentro del chroot (bind mount o enlace)
-    #    Usamos mount --bind para que los cambios sean reales en /srv/ftp/general
+    # 3. Bind mount de /srv/ftp/general dentro del chroot
     sudo mkdir -p /srv/ftp/$usuario/general
     sudo chown root:root /srv/ftp/$usuario/general
     sudo chmod 755 /srv/ftp/$usuario/general
@@ -116,7 +116,7 @@ function alta_usuario() {
         sudo mount --bind /srv/ftp/general /srv/ftp/$usuario/general
     fi
 
-    # 4. Subdirectorio de grupo dentro del chroot (bind mount)
+    # 4. Bind mount de la carpeta de grupo dentro del chroot
     sudo mkdir -p /srv/ftp/$usuario/$grupo
     sudo chown root:$grupo /srv/ftp/$usuario/$grupo
     sudo chmod 775 /srv/ftp/$usuario/$grupo
@@ -124,35 +124,35 @@ function alta_usuario() {
         sudo mount --bind /srv/ftp/$grupo /srv/ftp/$usuario/$grupo
     fi
 
-    # 5. Hacer los bind mounts persistentes en /etc/fstab
-    #    (se agrega solo si la línea no existe ya)
+    # 5. Persistir bind mounts en /etc/fstab
     if ! grep -q "/srv/ftp/$usuario/general" /etc/fstab; then
-        echo "/srv/ftp/general  /srv/ftp/$usuario/general  none  bind  0 0" | sudo tee -a /etc/fstab > /dev/null
+        echo "/srv/ftp/general  /srv/ftp/$usuario/general  none  bind  0 0" \
+            | sudo tee -a /etc/fstab > /dev/null
     fi
     if ! grep -q "/srv/ftp/$usuario/$grupo" /etc/fstab; then
-        echo "/srv/ftp/$grupo  /srv/ftp/$usuario/$grupo  none  bind  0 0" | sudo tee -a /etc/fstab > /dev/null
+        echo "/srv/ftp/$grupo  /srv/ftp/$usuario/$grupo  none  bind  0 0" \
+            | sudo tee -a /etc/fstab > /dev/null
     fi
 
-    # 6. Agregar usuario a la lista permitida de vsftpd
+    # 6. Agregar a user_list (lista blanca de vsftpd)
     if ! grep -q "^$usuario$" /etc/vsftpd/user_list 2>/dev/null; then
         echo "$usuario" | sudo tee -a /etc/vsftpd/user_list > /dev/null
     fi
 
-    # 7. Recargar vsftpd para que tome los cambios
+    # 7. Recargar vsftpd
     sudo systemctl reload vsftpd 2>/dev/null || sudo systemctl restart vsftpd
 
     echo ""
     echo "=========================================="
-    echo "[OK] Usuario creado exitosamente"
+    echo "[OK] Usuario '$usuario' creado exitosamente"
     echo "=========================================="
-    echo "  Usuario:   $usuario"
     echo "  Grupo:     $grupo"
     echo ""
     echo "  Estructura visible al conectar por FTP:"
-    echo "    /                  (raíz — solo lectura)"
-    echo "    /general           (lectura/escritura — todos)"
-    echo "    /$grupo            (lectura/escritura — grupo $grupo)"
-    echo "    /$usuario          (lectura/escritura — solo $usuario)"
+    echo "    /          (raíz — solo lectura)"
+    echo "    /general   (lectura/escritura — todos los usuarios)"
+    echo "    /$grupo    (lectura/escritura — grupo $grupo)"
+    echo "    /$usuario  (lectura/escritura — solo $usuario)"
     echo "=========================================="
 }
 
@@ -185,8 +185,9 @@ function baja_usuario() {
     echo ""
     echo "[INFO] Eliminando usuario '$usuario'..."
 
-    # Desmontar bind mounts antes de eliminar
     grupo=$(id -gn $usuario 2>/dev/null)
+
+    # Desmontar bind mounts antes de borrar
     if mountpoint -q /srv/ftp/$usuario/general 2>/dev/null; then
         sudo umount /srv/ftp/$usuario/general
     fi
@@ -194,16 +195,16 @@ function baja_usuario() {
         sudo umount /srv/ftp/$usuario/$grupo
     fi
 
-    # Limpiar entradas de fstab
+    # Limpiar fstab
     sudo sed -i "/\/srv\/ftp\/$usuario\//d" /etc/fstab
 
-    # Eliminar directorio chroot del usuario
+    # Eliminar directorio chroot
     sudo rm -rf /srv/ftp/$usuario
 
-    # Eliminar usuario del sistema (con su home)
+    # Eliminar usuario del sistema
     sudo userdel -r $usuario 2>/dev/null
 
-    # Eliminar de la lista de usuarios permitidos
+    # Eliminar de user_list
     sudo sed -i "/^$usuario$/d" /etc/vsftpd/user_list
 
     sudo systemctl reload vsftpd 2>/dev/null || sudo systemctl restart vsftpd
@@ -252,22 +253,22 @@ function cambiar_grupo_usuario() {
     fi
 
     echo ""
-    echo "[INFO] Cambiando usuario '$usuario' al grupo '$nuevo_grupo'..."
+    echo "[INFO] Cambiando usuario '$usuario' de '$grupo_actual' a '$nuevo_grupo'..."
 
-    # Desmontar bind mount del grupo anterior
+    # Desmontar y eliminar bind mount del grupo anterior
     if mountpoint -q /srv/ftp/$usuario/$grupo_actual 2>/dev/null; then
         sudo umount /srv/ftp/$usuario/$grupo_actual
     fi
     sudo rm -rf /srv/ftp/$usuario/$grupo_actual
     sudo sed -i "/\/srv\/ftp\/$usuario\/$grupo_actual/d" /etc/fstab
 
-    # Cambiar grupo primario del usuario
+    # Cambiar grupo primario
     sudo usermod -g $nuevo_grupo $usuario
 
-    # Actualizar permisos del directorio personal
+    # Actualizar permisos de la carpeta personal
     sudo chown $usuario:$nuevo_grupo /srv/ftp/$usuario/$usuario
 
-    # Montar la carpeta del nuevo grupo
+    # Crear bind mount del nuevo grupo
     sudo mkdir -p /srv/ftp/$usuario/$nuevo_grupo
     sudo chown root:$nuevo_grupo /srv/ftp/$usuario/$nuevo_grupo
     sudo chmod 775 /srv/ftp/$usuario/$nuevo_grupo
@@ -275,7 +276,8 @@ function cambiar_grupo_usuario() {
         sudo mount --bind /srv/ftp/$nuevo_grupo /srv/ftp/$usuario/$nuevo_grupo
     fi
     if ! grep -q "/srv/ftp/$usuario/$nuevo_grupo" /etc/fstab; then
-        echo "/srv/ftp/$nuevo_grupo  /srv/ftp/$usuario/$nuevo_grupo  none  bind  0 0" | sudo tee -a /etc/fstab > /dev/null
+        echo "/srv/ftp/$nuevo_grupo  /srv/ftp/$usuario/$nuevo_grupo  none  bind  0 0" \
+            | sudo tee -a /etc/fstab > /dev/null
     fi
 
     sudo systemctl reload vsftpd 2>/dev/null || sudo systemctl restart vsftpd
@@ -303,7 +305,9 @@ function listar_usuarios_ftp() {
     while IFS= read -r usuario; do
         [ -z "$usuario" ] && continue
         [[ "$usuario" =~ ^#.* ]] && continue
-        [ "$usuario" == "ftp" ] && continue   # omitir el anónimo en la lista
+        [ "$usuario" == "ftp" ] && continue
+        [ "$usuario" == "anonymous" ] && continue
+
         if id "$usuario" &>/dev/null; then
             grupo=$(id -gn $usuario)
             if [ "$grupo" == "reprobados" ] || [ "$grupo" == "recursadores" ]; then
@@ -319,7 +323,7 @@ function listar_usuarios_ftp() {
     echo "Total de usuarios FTP: $total"
     echo ""
     echo "Grupos disponibles:"
-    echo "  reprobados:  $(getent group reprobados | cut -d: -f4)"
+    echo "  reprobados:   $(getent group reprobados  | cut -d: -f4)"
     echo "  recursadores: $(getent group recursadores | cut -d: -f4)"
 }
 
@@ -344,14 +348,13 @@ function ver_permisos_usuario() {
 
     echo ""
     echo "=========================================="
-    echo "INFORMACIÓN DEL USUARIO: $usuario"
+    echo "INFORMACION DEL USUARIO: $usuario"
     echo "=========================================="
     echo "Grupo primario: $grupo"
     echo "UID: $(id -u $usuario)  |  GID: $(id -g $usuario)"
     echo ""
     echo "ESTRUCTURA FTP (vista dentro del chroot):"
     echo "=========================================="
-    echo ""
 
     for dir in "" "/general" "/$grupo" "/$usuario"; do
         ruta="/srv/ftp/$usuario$dir"
@@ -367,8 +370,6 @@ function ver_permisos_usuario() {
             printf "  %-20s  [NO EXISTE]\n" "$label"
         fi
     done
-
-    echo ""
     echo "=========================================="
 }
 

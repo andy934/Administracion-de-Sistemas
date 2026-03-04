@@ -29,14 +29,14 @@ function ver_estado_servicio() {
     echo ""
     echo "=== ESTADO DEL SERVICIO VSFTPD ==="
     echo ""
-    
+
     if ! command -v vsftpd &> /dev/null; then
         echo "[ERROR] vsftpd no está instalado."
         return 1
     fi
-    
+
     sudo systemctl status vsftpd --no-pager
-    
+
     echo ""
     echo "Información adicional:"
     echo "  • Puerto de control: 21"
@@ -50,9 +50,9 @@ function ver_estado_servicio() {
 function reiniciar_servicio() {
     echo ""
     echo "[INFO] Reiniciando servicio vsftpd..."
-    
+
     sudo systemctl restart vsftpd
-    
+
     if systemctl is-active vsftpd --quiet; then
         echo "[OK] Servicio reiniciado correctamente."
     else
@@ -71,7 +71,7 @@ function ver_logs() {
     echo "  2. Logs de transferencias (/var/log/vsftpd.log)"
     echo "  3. Últimas 50 líneas de ambos"
     read -p "Opción (1-3): " log_opcion
-    
+
     case $log_opcion in
         1)
             sudo journalctl -u vsftpd -n 50 --no-pager
@@ -105,60 +105,54 @@ function probar_conexion() {
     echo ""
     echo "=== PRUEBA DE CONEXIÓN FTP ==="
     echo ""
-    
+
     if ! systemctl is-active vsftpd --quiet; then
         echo "[ERROR] El servicio vsftpd no está corriendo."
         return 1
     fi
-    
+
     echo "Seleccione el tipo de conexión:"
     echo "  1. Anónimo (lectura en /general)"
     echo "  2. Usuario autenticado"
     read -p "Opción (1-2): " conexion_opcion
-    
+
     ip_servidor=$(hostname -I | awk '{print $1}')
-    
+
     case $conexion_opcion in
         1)
             echo ""
-            echo "Probando conexión anónima..."
-            echo ""
-            echo "Comando para probar desde otro cliente:"
+            echo "Datos de conexión anónima:"
             echo "  ftp $ip_servidor"
-            echo "  Usuario: anonymous"
-            echo "  Contraseña: [cualquiera]"
+            echo "  Usuario:    anonymous"
+            echo "  Contraseña: (enter vacío)"
             echo ""
-            echo "O con FileZilla:"
-            echo "  Host: ftp://$ip_servidor"
-            echo "  Usuario: anonymous"
-            echo "  Contraseña: [vacío o cualquiera]"
-            echo "  Puerto: 21"
+            echo "FileZilla:"
+            echo "  Host: ftp://$ip_servidor  Puerto: 21"
+            echo "  Usuario: anonymous  Contraseña: (vacío)"
             ;;
         2)
             read -p "Nombre de usuario: " usuario_test
             echo ""
-            echo "Comando para probar desde otro cliente:"
+            echo "Datos de conexión:"
             echo "  ftp $ip_servidor"
-            echo "  Usuario: $usuario_test"
-            echo "  Contraseña: [la configurada]"
+            echo "  Usuario:    $usuario_test"
+            echo "  Contraseña: (la configurada al crear el usuario)"
             echo ""
-            echo "O con FileZilla:"
-            echo "  Host: ftp://$ip_servidor"
+            echo "FileZilla:"
+            echo "  Host: ftp://$ip_servidor  Puerto: 21"
             echo "  Usuario: $usuario_test"
-            echo "  Contraseña: [la configurada]"
-            echo "  Puerto: 21"
             ;;
         *)
             echo "[ERROR] Opción inválida."
             ;;
     esac
-    
+
     echo ""
     echo "Verificando puerto 21..."
     if sudo ss -tuln | grep -q ":21 "; then
-        echo "[OK] El servidor está escuchando en el puerto 21"
+        echo "[OK] El servidor está escuchando en el puerto 21."
     else
-        echo "[ERROR] El servidor NO está escuchando en el puerto 21"
+        echo "[ERROR] El servidor NO está escuchando en el puerto 21."
     fi
 }
 
@@ -167,41 +161,19 @@ function main() {
     while true; do
         mostrar_menu
         read -p "Seleccione una opción: " opcion
-        
+
         case $opcion in
-            1)
-                instalar_configurar_completo
-                ;;
-            2)
-                ver_estado_servicio
-                ;;
-            3)
-                alta_usuario
-                ;;
-            4)
-                alta_masiva_usuarios
-                ;;
-            5)
-                baja_usuario
-                ;;
-            6)
-                cambiar_grupo_usuario
-                ;;
-            7)
-                listar_usuarios_ftp
-                ;;
-            8)
-                ver_permisos_usuario
-                ;;
-            9)
-                reiniciar_servicio
-                ;;
-            10)
-                ver_logs
-                ;;
-            11)
-                probar_conexion
-                ;;
+            1)  instalar_configurar_completo ;;
+            2)  ver_estado_servicio ;;
+            3)  alta_usuario ;;
+            4)  alta_masiva_usuarios ;;
+            5)  baja_usuario ;;
+            6)  cambiar_grupo_usuario ;;
+            7)  listar_usuarios_ftp ;;
+            8)  ver_permisos_usuario ;;
+            9)  reiniciar_servicio ;;
+            10) ver_logs ;;
+            11) probar_conexion ;;
             12)
                 echo ""
                 echo "Saliendo..."
@@ -209,21 +181,20 @@ function main() {
                 ;;
             *)
                 echo ""
-                echo "[ERROR] Opción no válida. Por favor, seleccione una opción del 1 al 12."
+                echo "[ERROR] Opción no válida. Seleccione una opción del 1 al 12."
                 ;;
         esac
-        
+
         echo ""
         read -p "Presione ENTER para continuar..."
     done
 }
 
-# Verificar si se está ejecutando como root o con sudo
+# Verificar privilegios
 if [ "$EUID" -ne 0 ]; then
     echo "[ADVERTENCIA] Este script requiere privilegios de superusuario."
-    echo "Algunas funciones podrían no funcionar correctamente."
+    echo "Ejecute con: sudo bash ftp-config.sh"
     echo ""
 fi
 
-# Ejecutar menú principal
 main
