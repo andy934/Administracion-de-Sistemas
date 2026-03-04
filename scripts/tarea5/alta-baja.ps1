@@ -59,15 +59,38 @@ function Alta-Usuario {
     Write-Host ""
     Write-Host "[INFO] Creando usuario '$usuario' en grupo '$grupo'..."
 
-    # Crear usuario local
-    New-LocalUser -Name $usuario -Password $pass1 -FullName $usuario `
-        -Description "Usuario FTP $grupo" -PasswordNeverExpires $true -ErrorAction Stop
+    # ── FIX: Usar net user en lugar de New-LocalUser ──────────────────────────
+    # New-LocalUser con -PasswordNeverExpires falla en Windows Server en espanol
+    # porque el binding de parametros no reconoce el argumento booleano $true
+    # en algunas versiones. net user es compatible con todas las versiones.
+    # ─────────────────────────────────────────────────────────────────────────
+    $passPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pass1))
+
+    $resultado = net user $usuario $passPlain /add /comment:"Usuario FTP $grupo" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] No se pudo crear el usuario: $resultado" -ForegroundColor Red
+        return
+    }
+
+    # Controla que la contrasena no expire
+    net user $usuario /expires:never 2>&1 | Out-Null
+
+    # Verificar que el usuario se creo
+    if (-not (Get-LocalUser -Name $usuario -ErrorAction SilentlyContinue)) {
+        Write-Host "[ERROR] El usuario '$usuario' no se creo correctamente." -ForegroundColor Red
+        return
+    }
 
     # Agregar al grupo
-    Add-LocalGroupMember -Group $grupo -Member $usuario
+    net localgroup $grupo $usuario /add 2>&1 | Out-Null
 
-    # Crear estructura de directorios con junctions
-    # LocalUser\$usuario = raiz del chroot (equivalente a /srv/ftp/$USER en Linux)
+    # ── Crear estructura de directorios con junctions ─────────────────────────
+    # LocalUser\$usuario = raiz del chroot de IIS FTP
+    # El usuario la ve como "/" al conectarse.
+    # Dentro se crean junctions (equivalente a bind mounts de Linux) hacia
+    # las carpetas compartidas: general y la del grupo.
+    # ─────────────────────────────────────────────────────────────────────────
     $userRoot = "$FTP_ROOT\LocalUser\$usuario"
 
     $dirs = @("$FTP_ROOT\LocalUser", $userRoot, "$userRoot\$usuario")
@@ -77,13 +100,17 @@ function Alta-Usuario {
         }
     }
 
+    # Permisos NTFS — usar nombre local del sistema resolviendo por SID
+    # para evitar problemas de idioma (igual que en configuracion.ps1)
+    $cuentaLocal = "$env:COMPUTERNAME\$usuario"
+
     # Raiz del chroot: solo lectura para el usuario
-    Establecer-Permisos-NTFS $userRoot $usuario "ReadAndExecute"
+    Establecer-Permisos-NTFS $userRoot $cuentaLocal "ReadAndExecute"
 
     # Carpeta personal: escritura solo para el usuario
-    Establecer-Permisos-NTFS "$userRoot\$usuario" $usuario "Modify"
+    Establecer-Permisos-NTFS "$userRoot\$usuario" $cuentaLocal "Modify"
 
-    # Junction a /general (equivalente a bind mount de Linux)
+    # Junction a /general
     $jGeneral = "$userRoot\general"
     if (Test-Path $jGeneral) { cmd /c "rmdir `"$jGeneral`"" | Out-Null }
     cmd /c "mklink /J `"$jGeneral`" `"$FTP_ROOT\general`"" | Out-Null
@@ -94,7 +121,7 @@ function Alta-Usuario {
     cmd /c "mklink /J `"$jGrupo`" `"$FTP_ROOT\$grupo`"" | Out-Null
 
     # Permiso de escritura en la carpeta de grupo real
-    Establecer-Permisos-NTFS "$FTP_ROOT\$grupo" $usuario "Modify"
+    Establecer-Permisos-NTFS "$FTP_ROOT\$grupo" $cuentaLocal "Modify"
 
     # Reiniciar sitio para aplicar cambios
     if (Importar-WebAdmin) {
@@ -168,9 +195,9 @@ function Baja-Usuario {
     Write-Host "[INFO] Eliminando usuario '$usuario'..."
 
     # Eliminar usuario del sistema
-    Remove-LocalUser -Name $usuario -ErrorAction SilentlyContinue
+    net user $usuario /delete 2>&1 | Out-Null
 
-    # Eliminar junctions antes de borrar la carpeta (para no borrar directorios reales)
+    # Eliminar junctions antes de borrar la carpeta
     $userRoot = "$FTP_ROOT\LocalUser\$usuario"
     if (Test-Path $userRoot) {
         Get-ChildItem $userRoot | Where-Object {
@@ -207,8 +234,8 @@ function Cambiar-Grupo-Usuario {
     # Detectar grupo actual
     $grupoActual = $null
     foreach ($g in $GRUPOS) {
-        $miembros = Get-LocalGroupMember -Group $g -ErrorAction SilentlyContinue
-        if ($miembros | Where-Object { $_.Name -like "*\$usuario" }) {
+        $miembros = net localgroup $g 2>&1
+        if ($miembros | Where-Object { $_ -match "^$usuario$" }) {
             $grupoActual = $g; break
         }
     }
@@ -235,11 +262,12 @@ function Cambiar-Grupo-Usuario {
 
     # Quitar del grupo anterior y agregar al nuevo
     if ($grupoActual) {
-        Remove-LocalGroupMember -Group $grupoActual -Member $usuario -ErrorAction SilentlyContinue
+        net localgroup $grupoActual $usuario /delete 2>&1 | Out-Null
     }
-    Add-LocalGroupMember -Group $nuevoGrupo -Member $usuario
+    net localgroup $nuevoGrupo $usuario /add 2>&1 | Out-Null
 
-    $userRoot = "$FTP_ROOT\LocalUser\$usuario"
+    $userRoot    = "$FTP_ROOT\LocalUser\$usuario"
+    $cuentaLocal = "$env:COMPUTERNAME\$usuario"
 
     # Reemplazar junction del grupo anterior
     if ($grupoActual -and (Test-Path "$userRoot\$grupoActual")) {
@@ -258,7 +286,7 @@ function Cambiar-Grupo-Usuario {
             Set-Acl "$FTP_ROOT\$grupoActual" $acl
         } catch {}
     }
-    Establecer-Permisos-NTFS "$FTP_ROOT\$nuevoGrupo" $usuario "Modify"
+    Establecer-Permisos-NTFS "$FTP_ROOT\$nuevoGrupo" $cuentaLocal "Modify"
 
     if (Importar-WebAdmin) {
         Stop-WebSite  -Name $SITE_NAME -ErrorAction SilentlyContinue
@@ -284,24 +312,23 @@ function Listar-Usuarios {
 
     $total = 0
     foreach ($grupo in $GRUPOS) {
-        $miembros = Get-LocalGroupMember -Group $grupo -ErrorAction SilentlyContinue
-        foreach ($m in $miembros) {
-            $nombre = $m.Name -replace ".*\\", ""
-            $dir    = "$FTP_ROOT\LocalUser\$nombre"
-            Write-Host ("| {0,-16} | {1,-12} | {2,-36} |" -f $nombre, $grupo, $dir)
-            $total++
+        # Obtener miembros con net localgroup (mas compatible)
+        $salida = net localgroup $grupo 2>&1
+        $enMiembros = $false
+        foreach ($linea2 in $salida) {
+            if ($linea2 -match "^-{10}") { $enMiembros = $true; continue }
+            if ($enMiembros -and $linea2.Trim() -ne "" -and $linea2 -notmatch "El comando") {
+                $nombre = $linea2.Trim()
+                $dir    = "$FTP_ROOT\LocalUser\$nombre"
+                Write-Host ("| {0,-16} | {1,-12} | {2,-36} |" -f $nombre, $grupo, $dir)
+                $total++
+            }
         }
     }
 
     Write-Host $linea
     Write-Host ""
     Write-Host "Total de usuarios FTP: $total"
-    Write-Host ""
-    foreach ($grupo in $GRUPOS) {
-        $miembros = (Get-LocalGroupMember -Group $grupo -ErrorAction SilentlyContinue) |
-                    ForEach-Object { $_.Name -replace ".*\\", "" }
-        Write-Host "  ${grupo}: $($miembros -join ', ')"
-    }
 }
 
 # ============================================================
@@ -321,8 +348,8 @@ function Ver-Permisos-Usuario {
 
     $grupo = $null
     foreach ($g in $GRUPOS) {
-        $miembros = Get-LocalGroupMember -Group $g -ErrorAction SilentlyContinue
-        if ($miembros | Where-Object { $_.Name -like "*\$usuario" }) {
+        $salida = net localgroup $g 2>&1
+        if ($salida | Where-Object { $_.Trim() -eq $usuario }) {
             $grupo = $g; break
         }
     }
@@ -338,10 +365,10 @@ function Ver-Permisos-Usuario {
 
     $userRoot = "$FTP_ROOT\LocalUser\$usuario"
     $subdirs  = @(
-        @{ Label = "/";          Ruta = $userRoot },
-        @{ Label = "/general";   Ruta = "$userRoot\general" },
-        @{ Label = "/$grupo";    Ruta = "$userRoot\$grupo" },
-        @{ Label = "/$usuario";  Ruta = "$userRoot\$usuario" }
+        @{ Label = "/";         Ruta = $userRoot },
+        @{ Label = "/general";  Ruta = "$userRoot\general" },
+        @{ Label = "/$grupo";   Ruta = "$userRoot\$grupo" },
+        @{ Label = "/$usuario"; Ruta = "$userRoot\$usuario" }
     )
 
     foreach ($s in $subdirs) {
