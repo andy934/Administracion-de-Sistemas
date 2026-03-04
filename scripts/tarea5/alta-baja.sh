@@ -83,21 +83,6 @@ function alta_usuario() {
     # Establecer contraseña
     echo "$usuario:$password" | sudo chpasswd
 
-    # ── ESTRUCTURA DE DIRECTORIOS CHROOT ─────────────────────────────────────
-    # Con local_root=/srv/ftp/$USER y chroot_local_user=YES, vsftpd hace
-    # chroot a /srv/ftp/$usuario — el usuario lo ve como su raíz "/".
-    #
-    # REGLA: la raíz del chroot debe ser root:root 755 (NO escribible por
-    # el usuario), de lo contrario vsftpd rechaza el login con 500 OOPS.
-    # Las carpetas donde el usuario escribe van DENTRO de esa raíz.
-    #
-    # Vista del usuario al conectar por FTP:
-    #   /                → raíz chroot  (root:root 755 — solo lectura)
-    #   /general         → bind mount a /srv/ftp/general  (rw para todos)
-    #   /reprobados      → bind mount a /srv/ftp/reprobados (rw para el grupo)
-    #   /usuario         → carpeta personal                (rw solo para él)
-    # ─────────────────────────────────────────────────────────────────────────
-
     # 1. Raíz del chroot: root:root 755
     sudo mkdir -p /srv/ftp/$usuario
     sudo chown root:root /srv/ftp/$usuario

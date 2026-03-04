@@ -68,7 +68,8 @@ function configurar_vsftpd() {
             /etc/vsftpd/vsftpd.conf.backup.$(date +%Y%m%d_%H%M%S)
     fi
 
-    # FIX 1: anon_root=/srv/ftp (no /srv/ftp/general — causaba conflicto con local_root)
+    # FIX 1: anon_root=/srv/ftp/general — anonymous aterriza en /general
+    #         y no puede ver carpetas de otros usuarios
     # FIX 2: local_root declarado UNA sola vez con user_sub_token=$USER
     #         (estaba duplicado, la 2ª línea pisaba la 1ª y rompía el sub_token)
     sudo tee /etc/vsftpd/vsftpd.conf > /dev/null <<'EOF'
@@ -83,7 +84,8 @@ connect_from_port_20=YES
 xferlog_std_format=YES
 
 # Acceso anónimo
-anon_root=/srv/ftp
+# anonymous aterriza en /general y solo ve esa carpeta (sin acceso al resto)
+anon_root=/srv/ftp/general
 no_anon_password=YES
 anon_upload_enable=NO
 anon_mkdir_write_enable=NO
