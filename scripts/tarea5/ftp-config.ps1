@@ -4,9 +4,11 @@
 #   Uso: .\ftp-config.ps1   (como Administrador)
 # ============================================================
 
-# Importar modulos
-. .\configuracion.ps1
-. .\alta-baja.ps1
+# Importar modulos usando ruta absoluta para evitar problemas
+# con guiones en nombres de archivo en dot-sourcing de PowerShell
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+. "$scriptDir\configuracion.ps1"
+. "$scriptDir\alta-baja.ps1"
 
 # ── Verificar que se ejecuta como Administrador ───────────────
 $esAdmin = ([Security.Principal.WindowsPrincipal] `
