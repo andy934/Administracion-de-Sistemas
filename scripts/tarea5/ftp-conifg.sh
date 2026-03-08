@@ -19,7 +19,8 @@ function mostrar_menu() {
     echo "-- 9. Reiniciar el servicio vsftpd                    --"
     echo "-- 10. Ver logs del servicio                          --"
     echo "-- 11. Probar conexión FTP                            --"
-    echo "-- 12. Salir                                          --"
+    echo "-- 12. Reparar bind mounts (tras reinicio)            --"
+    echo "-- 13. Salir                                          --"
     echo "=========================================================="
     echo ""
 }
@@ -174,14 +175,15 @@ function main() {
             9)  reiniciar_servicio ;;
             10) ver_logs ;;
             11) probar_conexion ;;
-            12)
+            12) reparar_mounts_usuarios ;;
+            13)
                 echo ""
                 echo "Saliendo..."
                 exit 0
                 ;;
             *)
                 echo ""
-                echo "[ERROR] Opción no válida. Seleccione una opción del 1 al 12."
+                echo "[ERROR] Opción no válida. Seleccione una opción del 1 al 13."
                 ;;
         esac
 
