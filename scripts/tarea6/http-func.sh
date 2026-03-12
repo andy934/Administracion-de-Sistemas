@@ -186,11 +186,23 @@ function instalar_apache() {
 
     # Instalar dependencias de compilación
     log_info "Instalando dependencias de compilación..."
-    sudo dnf install -y gcc make pcre2 pcre2-devel openssl-devel expat-devel \
+    local deps=(gcc make pcre2 pcre2-devel openssl-devel expat-devel \
         libxml2-devel lua-devel brotli-devel zlib-devel \
-        apr apr-devel apr-util apr-util-devel \
-        > /dev/null 2>&1
-    log_ok "Dependencias instaladas."
+        apr apr-devel apr-util apr-util-devel)
+    local faltantes=()
+    for dep in "${deps[@]}"; do
+        if ! rpm -q "$dep" &>/dev/null; then
+            faltantes+=("$dep")
+        fi
+    done
+    if [ ${#faltantes[@]} -gt 0 ]; then
+        log_info "Instalando: ${faltantes[*]}"
+        sudo dnf install -y "${faltantes[@]}"
+        if [ $? -ne 0 ]; then
+            log_warn "Algunas dependencias no se pudieron instalar. Continuando..."
+        fi
+    fi
+    log_ok "Dependencias verificadas."
 
     listar_versiones_apache
 
@@ -454,9 +466,21 @@ function instalar_nginx() {
 
     # Dependencias de compilación
     log_info "Instalando dependencias de compilación..."
-    sudo dnf install -y gcc make pcre2-devel openssl-devel zlib-devel \
-        > /dev/null 2>&1
-    log_ok "Dependencias instaladas."
+    local deps=(gcc make pcre2 pcre2-devel openssl-devel zlib-devel)
+    local faltantes=()
+    for dep in "${deps[@]}"; do
+        if ! rpm -q "$dep" &>/dev/null; then
+            faltantes+=("$dep")
+        fi
+    done
+    if [ ${#faltantes[@]} -gt 0 ]; then
+        log_info "Instalando: ${faltantes[*]}"
+        sudo dnf install -y "${faltantes[@]}"
+        if [ $? -ne 0 ]; then
+            log_warn "Algunas dependencias no se pudieron instalar. Continuando..."
+        fi
+    fi
+    log_ok "Dependencias verificadas."
 
     listar_versiones_nginx
 
