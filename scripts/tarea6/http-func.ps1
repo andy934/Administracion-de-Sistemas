@@ -502,7 +502,7 @@ function Listar-Versiones-Nginx-Win {
     }
     Write-Host ""
 }
-
+}
 function Instalar-Nginx-Win {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
