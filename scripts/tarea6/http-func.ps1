@@ -446,46 +446,32 @@ function Listar-Versiones-Nginx-Win {
 
     $script:NginxVersiones = @()
 
-    Asegurar-Chocolatey
     try {
-        $todasVersiones = choco search nginx --exact 2>$null |
-                          Where-Object { $_ -match '^nginx ' } |
-                          ForEach-Object { ($_ -split '\s+')[1] } |
-                          Where-Object { $_ -match '^\d' } |
-                          Sort-Object { [version]($_ -replace '[^0-9.]','') }
+        # Consultar versiones directamente desde nginx.org
+        $html = (New-Object System.Net.WebClient).DownloadString('https://nginx.org/en/download.html')
+        $matches_stable  = [regex]::Matches($html, 'nginx-(1\.\d*[02468]\.\d+)\.zip')
+        $matches_mainline = [regex]::Matches($html, 'nginx-(1\.\d*[13579]\.\d+)\.zip')
 
-        if ($todasVersiones -and $todasVersiones.Count -ge 2) {
-            $count = $todasVersiones.Count
-            $stable = $todasVersiones | Where-Object {
-                $minor = ($_ -split '\.')[1]
-                [int]$minor % 2 -eq 0
-            } | Sort-Object { [version]$_ }
+        $stable = $matches_stable | ForEach-Object { $_.Groups[1].Value } |
+                  Sort-Object { [version]$_ } | Select-Object -Unique
+        $mainline = $matches_mainline | ForEach-Object { $_.Groups[1].Value } |
+                    Sort-Object { [version]$_ } | Select-Object -Unique | Select-Object -Last 1
 
-            $mainline = $todasVersiones | Where-Object {
-                $minor = ($_ -split '\.')[1]
-                [int]$minor % 2 -eq 1
-            } | Sort-Object { [version]$_ } | Select-Object -Last 1
-
-            if ($stable -and $stable.Count -ge 2) {
-                $stableCount = $stable.Count
-                $script:NginxVersiones = @(
-                    $stable[$stableCount - 2],
-                    $stable[$stableCount - 1],
-                    $(if ($mainline) { $mainline } else { $stable[$stableCount - 1] })
-                )
-            } elseif ($todasVersiones.Count -ge 2) {
-                $script:NginxVersiones = @(
-                    $todasVersiones[$count - 2],
-                    $todasVersiones[$count - 1],
-                    $todasVersiones[$count - 1]
-                )
-            }
+        if ($stable -and $stable.Count -ge 2) {
+            $s = @($stable)
+            $script:NginxVersiones = @(
+                $s[$s.Count - 2],
+                $s[$s.Count - 1],
+                $(if ($mainline) { $mainline } else { $s[$s.Count - 1] })
+            )
+        } elseif ($stable -and $stable.Count -eq 1) {
+            $script:NginxVersiones = @($stable[0], $stable[0], $(if ($mainline) { $mainline } else { $stable[0] }))
         }
     } catch { }
 
     if ($script:NginxVersiones.Count -eq 0) {
         Write-Warn "No se pudieron consultar versiones. Usando versiones conocidas."
-        $script:NginxVersiones = @("1.26.2", "1.26.3", "1.27.4")
+        $script:NginxVersiones = @("1.26.3", "1.28.0", "1.27.4")
     }
 
     $etiquetas = @("Estable anterior", "Estable actual", "Desarrollo (Mainline)")
@@ -529,22 +515,35 @@ function Instalar-Nginx-Win {
     Stop-Service "nginx" -ErrorAction SilentlyContinue
     taskkill /f /im nginx.exe 2>$null
 
-    Write-Info "Instalando Nginx $versionElegida via Chocolatey..."
-    choco install nginx --version $versionElegida -y --no-progress 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        choco install nginx -y --no-progress 2>$null
+    # Descargar e instalar nginx directamente desde nginx.org
+    $nginxDir = "C:\nginx"
+    $zipPath  = "$env:TEMP\nginx-$versionElegida.zip"
+
+    if (Test-Path "$nginxDir\nginx.exe") {
+        Write-Info "Nginx ya instalado en $nginxDir"
+    } else {
+        Write-Info "Descargando Nginx $versionElegida desde nginx.org..."
+        $url = "https://nginx.org/download/nginx-$versionElegida.zip"
+        try {
+            (New-Object System.Net.WebClient).DownloadFile($url, $zipPath)
+            Write-Info "Extrayendo..."
+            Expand-Archive -Path $zipPath -DestinationPath "C:\" -Force
+            # El zip extrae a C:\nginx-x.x.x, renombrar a C:\nginx
+            $extracted = Get-ChildItem "C:\" -Directory -Filter "nginx-*" | Select-Object -First 1
+            if ($extracted) {
+                if (Test-Path $nginxDir) { Remove-Item $nginxDir -Recurse -Force }
+                Rename-Item $extracted.FullName $nginxDir
+            }
+            Remove-Item $zipPath -ErrorAction SilentlyContinue
+            Write-OK "Nginx instalado en $nginxDir"
+        } catch {
+            Write-Err "Error descargando Nginx: $_"
+            return
+        }
     }
 
-    $nginxDir = @("C:\nginx") | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-    if (-not $nginxDir) {
-        $nginxDir = Get-ChildItem "C:\ProgramData\chocolatey\lib\nginx\tools" `
-                    -Directory -ErrorAction SilentlyContinue |
-                    Select-Object -First 1 -ExpandProperty FullName
-    }
-
-    if (-not $nginxDir) {
-        Write-Err "No se encontro el directorio de instalacion de Nginx."
+    if (-not (Test-Path "$nginxDir\nginx.exe")) {
+        Write-Err "No se encontro nginx.exe en $nginxDir"
         return
     }
 
