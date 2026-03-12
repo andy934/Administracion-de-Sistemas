@@ -103,69 +103,85 @@ function crear_usuario_servicio() {
 
 function listar_versiones_apache() {
     echo ""
-    log_info "Consultando versiones disponibles de Apache (httpd) en el repositorio..."
+    log_info "Consultando versiones disponibles de Apache HTTPD en downloads.apache.org..."
     echo ""
-
-    # Versión instalada
-    local instalada=""
-    if rpm -q httpd &>/dev/null; then
-        instalada=$(rpm -q httpd --queryformat "%{VERSION}-%{RELEASE}\n")
-        echo -e "  ${GREEN}► Instalada actualmente:${NC} $instalada"
-        echo ""
+ 
+    APACHE_VERSIONES=()
+ 
+    # Obtener todas las versiones 2.4.x disponibles
+    local pagina
+    pagina=$(curl -s "https://downloads.apache.org/httpd/" 2>/dev/null)
+ 
+    if [ -z "$pagina" ]; then
+        log_warn "Sin conexión. Usando versiones conocidas."
+        APACHE_VERSIONES=("2.4.61" "2.4.62" "2.4.63")
+    else
+        # Extraer versiones 2.4.x ordenadas
+        local todas
+        todas=$(echo "$pagina" | grep -o 'httpd-2\.[0-9]*\.[0-9]*\.tar\.gz' | \
+                grep -o '2\.[0-9]*\.[0-9]*' | sort -V | uniq)
+ 
+        local count
+        count=$(echo "$todas" | wc -l)
+ 
+        if [ "$count" -ge 3 ]; then
+            local anterior estable
+            anterior=$(echo "$todas" | tail -2 | head -1)
+            estable=$(echo "$todas" | tail -1)
+            APACHE_VERSIONES=("$anterior" "$estable")
+        elif [ "$count" -ge 1 ]; then
+            while IFS= read -r v; do
+                APACHE_VERSIONES+=("$v")
+            done <<< "$todas"
+        fi
     fi
-
-    # Versiones en repositorio (dnf)
-    echo -e "  ${CYAN}Versiones disponibles en repositorio:${NC}"
-    local versiones
-    versiones=$(sudo dnf list --showduplicates httpd 2>/dev/null | \
-                grep "^httpd" | awk '{print NR". "$2" ("$3")"}')
-
-    if [ -z "$versiones" ]; then
-        log_warn "No se encontraron versiones en repositorio. Mostrando versión por defecto."
-        echo "  1. (versión por defecto del repositorio)"
-        echo ""
-        echo "default"
-        return
-    fi
-
-    echo "$versiones" | while IFS= read -r linea; do
-        echo "    $linea"
+ 
+    # Agregar versión de desarrollo (2.5.x desde archive o trunk conocido)
+    local dev_ver
+    dev_ver=$(curl -s "https://archive.apache.org/dist/httpd/" 2>/dev/null | \
+              grep -o 'httpd-2\.5\.[0-9]*\.tar\.gz' | \
+              grep -o '2\.[0-9]*\.[0-9]*' | sort -V | tail -1)
+    [ -n "$dev_ver" ] && APACHE_VERSIONES+=("$dev_ver") || APACHE_VERSIONES+=("2.4.63")
+ 
+    echo -e "  ${CYAN}Versiones disponibles (Apache HTTPD):${NC}"
+    echo ""
+    local etiquetas=("Estable anterior" "Estable actual (LTS)" "Desarrollo (Latest)")
+    local i=0
+    for v in "${APACHE_VERSIONES[@]}"; do
+        echo "    $((i+1)). $v — ${etiquetas[$i]:-Adicional}"
+        ((i++))
     done
     echo ""
 }
-
+ 
 function instalar_apache() {
     echo ""
     echo -e "${CYAN}========================================${NC}"
     echo -e "${CYAN}   INSTALACIÓN DE APACHE HTTPD          ${NC}"
     echo -e "${CYAN}========================================${NC}"
     echo ""
-
-    # Listar versiones
+ 
+    # Instalar dependencias de compilación
+    log_info "Instalando dependencias de compilación..."
+    sudo dnf install -y gcc make pcre2-devel openssl-devel expat-devel \
+        libxml2-devel lua-devel brotli-devel zlib-devel apr-devel apr-util-devel \
+        > /dev/null 2>&1
+    log_ok "Dependencias instaladas."
+ 
     listar_versiones_apache
-
-    # Selección de versión
-    local version_elegida
-    local versiones_disponibles
-    versiones_disponibles=$(sudo dnf list --showduplicates httpd 2>/dev/null | \
-                            grep "^httpd" | awk '{print $2}')
-    local total
-    total=$(echo "$versiones_disponibles" | wc -l)
-
+ 
+    local total=${#APACHE_VERSIONES[@]}
+    local seleccion version_elegida
+ 
     while true; do
-        read -p "Seleccione número de versión (1-$total, o ENTER para la más reciente): " seleccion
-        if [ -z "$seleccion" ]; then
-            version_elegida=""
-            break
-        fi
+        read -p "Seleccione número de versión (1-$total): " seleccion
         if [[ "$seleccion" =~ ^[0-9]+$ ]] && [ "$seleccion" -ge 1 ] && [ "$seleccion" -le "$total" ]; then
-            version_elegida=$(echo "$versiones_disponibles" | sed -n "${seleccion}p")
+            version_elegida="${APACHE_VERSIONES[$((seleccion-1))]}"
             break
         fi
         log_err "Selección inválida. Ingrese un número entre 1 y $total."
     done
-
-    # Selección de puerto
+ 
     local puerto
     while true; do
         read -p "Puerto de escucha (ej. 80, 8080, 8888): " puerto
@@ -173,54 +189,86 @@ function instalar_apache() {
             break
         fi
     done
-
-    # Instalar
-    log_info "Instalando Apache httpd..."
-    if [ -n "$version_elegida" ]; then
-        sudo dnf install -y "httpd-$version_elegida" > /dev/null 2>&1 || \
-        sudo dnf install -y httpd > /dev/null 2>&1
-    else
-        sudo dnf install -y httpd > /dev/null 2>&1
+ 
+    # Detener servicio anterior si existe
+    sudo systemctl stop httpd-custom 2>/dev/null
+ 
+    # Descargar
+    local url="https://downloads.apache.org/httpd/httpd-${version_elegida}.tar.gz"
+    local tmp_dir="/tmp/apache-build"
+    sudo mkdir -p "$tmp_dir"
+ 
+    log_info "Descargando Apache HTTPD $version_elegida..."
+    sudo curl -sL "$url" -o "$tmp_dir/httpd.tar.gz"
+ 
+    if [ ! -s "$tmp_dir/httpd.tar.gz" ]; then
+        log_info "Intentando mirror de archivo..."
+        url="https://archive.apache.org/dist/httpd/httpd-${version_elegida}.tar.gz"
+        sudo curl -sL "$url" -o "$tmp_dir/httpd.tar.gz"
     fi
-
-    if ! rpm -q httpd &>/dev/null; then
-        log_err "No se pudo instalar Apache httpd."
+ 
+    if [ ! -s "$tmp_dir/httpd.tar.gz" ]; then
+        log_err "No se pudo descargar Apache $version_elegida"
         return 1
     fi
-    log_ok "Apache httpd instalado."
-
-    local version_real
-    version_real=$(httpd -v 2>/dev/null | grep "Server version" | awk '{print $3}' | cut -d'/' -f2)
-
+ 
+    # Extraer y compilar
+    log_info "Extrayendo y compilando Apache $version_elegida (esto puede tardar varios minutos)..."
+    cd "$tmp_dir"
+    sudo tar -xzf httpd.tar.gz
+    cd "httpd-${version_elegida}"
+ 
+    sudo ./configure \
+        --prefix="$APACHE_INSTALL_DIR" \
+        --enable-so \
+        --enable-ssl \
+        --enable-rewrite \
+        --enable-headers \
+        --with-mpm=prefork \
+        > /tmp/apache-configure.log 2>&1
+ 
+    if [ $? -ne 0 ]; then
+        log_err "Error en ./configure. Revisa /tmp/apache-configure.log"
+        return 1
+    fi
+ 
+    sudo make -j$(nproc) > /tmp/apache-make.log 2>&1
+    if [ $? -ne 0 ]; then
+        log_err "Error en make. Revisa /tmp/apache-make.log"
+        return 1
+    fi
+ 
+    sudo make install > /dev/null 2>&1
+    sudo rm -rf "$tmp_dir"
+    log_ok "Apache HTTPD $version_elegida compilado e instalado en $APACHE_INSTALL_DIR"
+ 
     # Configurar puerto
-    log_info "Configurando puerto $puerto en /etc/httpd/conf/httpd.conf..."
-    sudo sed -i "s/^Listen .*/Listen $puerto/" /etc/httpd/conf/httpd.conf
-    log_ok "Puerto configurado: $puerto"
-
-    # Seguridad: ocultar versión
-    configurar_seguridad_apache
-
-    # Configurar métodos HTTP permitidos
-    configurar_metodos_apache
-
-    # Crear usuario dedicado (apache ya existe en Rocky, pero verificamos)
-    crear_usuario_servicio "apache" "/var/www/html"
-
-    # Crear index.html personalizado
-    sudo tee /var/www/html/index.html > /dev/null <<EOF
+    sudo sed -i "s/^Listen .*/Listen $puerto/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
+    sudo sed -i "s/^#ServerName .*/ServerName localhost:$puerto/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
+ 
+    # Seguridad
+    configurar_seguridad_apache_src
+ 
+    # Crear usuario dedicado
+    crear_usuario_servicio "apache-srv" "$APACHE_INSTALL_DIR/htdocs"
+    sudo sed -i "s/^User .*/User apache-srv/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
+    sudo sed -i "s/^Group .*/Group apache-srv/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
+ 
+    # Crear index.html
+    sudo tee "$APACHE_INSTALL_DIR/htdocs/index.html" > /dev/null <<EOF
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Apache - Administración de Sistemas</title></head>
+<head><meta charset="UTF-8"><title>Apache HTTPD - Administración de Sistemas</title></head>
 <body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f4f8">
-  <h1 style="color:#c0392b">🌐 Apache HTTPD</h1>
+  <h1 style="color:#c0392b">Apache HTTPD</h1>
   <table style="margin:auto;border-collapse:collapse;width:400px">
     <tr style="background:#c0392b;color:white">
       <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
     </tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
         <td style="padding:8px;border:1px solid #ddd">Apache HTTPD</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
-        <td style="padding:8px;border:1px solid #ddd">$version_real</td></tr>
+    <tr><td style="padding:8px;border:1px solid #ddd">Version</td>
+        <td style="padding:8px;border:1px solid #ddd">$version_elegida</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
         <td style="padding:8px;border:1px solid #ddd">$puerto</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Sistema</td>
@@ -229,57 +277,69 @@ function instalar_apache() {
 </body>
 </html>
 EOF
-
+ 
+    # Crear servicio systemd
+    sudo tee /etc/systemd/system/httpd-custom.service > /dev/null <<EOF2
+[Unit]
+Description=Apache HTTPD $version_elegida (compilado)
+After=network.target
+ 
+[Service]
+Type=forking
+User=root
+ExecStart=$APACHE_INSTALL_DIR/bin/apachectl start
+ExecStop=$APACHE_INSTALL_DIR/bin/apachectl stop
+ExecReload=$APACHE_INSTALL_DIR/bin/apachectl graceful
+PIDFile=$APACHE_INSTALL_DIR/logs/httpd.pid
+Restart=on-failure
+ 
+[Install]
+WantedBy=multi-user.target
+EOF2
+ 
     # SELinux
     if command -v semanage &>/dev/null; then
         sudo semanage port -a -t http_port_t -p tcp "$puerto" 2>/dev/null || \
         sudo semanage port -m -t http_port_t -p tcp "$puerto" 2>/dev/null
     fi
-
-    # Firewall
+ 
     configurar_firewall_puerto "$puerto"
-
-    # Habilitar e iniciar
-    sudo systemctl enable httpd > /dev/null 2>&1
-    sudo systemctl restart httpd
-
-    if systemctl is-active httpd --quiet; then
-        log_ok "Apache httpd corriendo en puerto $puerto."
+ 
+    sudo systemctl daemon-reload
+    sudo systemctl enable httpd-custom > /dev/null 2>&1
+    sudo systemctl restart httpd-custom
+ 
+    sleep 2
+    if systemctl is-active httpd-custom --quiet; then
+        log_ok "Apache HTTPD $version_elegida corriendo en puerto $puerto."
         echo ""
         echo -e "${GREEN}Verificación con curl:${NC}"
-        curl -sI "http://localhost:$puerto" 2>/dev/null | head -5
+        curl -sI "http://localhost:$puerto" 2>/dev/null | head -6
     else
-        log_err "Apache httpd no pudo iniciarse."
-        sudo journalctl -xeu httpd --no-pager | tail -10
+        log_err "Apache no pudo iniciarse."
+        sudo journalctl -xeu httpd-custom --no-pager | tail -15
     fi
 }
-
-function configurar_seguridad_apache() {
+ 
+function configurar_seguridad_apache_src() {
     log_info "Configurando seguridad Apache (ocultando versión)..."
-    local security_conf="/etc/httpd/conf.d/security.conf"
-    sudo tee "$security_conf" > /dev/null <<'EOF'
-# Ocultar versión y SO del servidor
+    local httpd_conf="$APACHE_INSTALL_DIR/conf/httpd.conf"
+ 
+    # Agregar directivas de seguridad al final del httpd.conf
+    sudo tee -a "$httpd_conf" > /dev/null <<'EOF'
+ 
+# === Seguridad ===
 ServerTokens Prod
 ServerSignature Off
-
-# Encabezados de seguridad
-Header always set X-Frame-Options "SAMEORIGIN"
-Header always set X-Content-Type-Options "nosniff"
-Header always set X-XSS-Protection "1; mode=block"
-Header always unset X-Powered-By
-
-# Cargar módulo headers si no está cargado
-<IfModule !mod_headers.c>
-    LoadModule headers_module modules/mod_headers.so
+ 
+# Encabezados de seguridad (requiere mod_headers)
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always unset X-Powered-By
 </IfModule>
-EOF
-    log_ok "Seguridad Apache configurada."
-}
-
-function configurar_metodos_apache() {
-    log_info "Restringiendo métodos HTTP peligrosos..."
-    local metodos_conf="/etc/httpd/conf.d/metodos.conf"
-    sudo tee "$metodos_conf" > /dev/null <<'EOF'
+ 
 # Rechazar métodos peligrosos
 <Location "/">
     <LimitExcept GET POST HEAD OPTIONS>
@@ -287,9 +347,16 @@ function configurar_metodos_apache() {
     </LimitExcept>
 </Location>
 EOF
-    log_ok "Métodos TRACE, TRACK, DELETE deshabilitados."
+    log_ok "Seguridad Apache configurada."
 }
-
+ 
+function configurar_seguridad_apache() {
+    configurar_seguridad_apache_src
+}
+ 
+function configurar_metodos_apache() {
+    log_info "Métodos HTTP ya configurados en configurar_seguridad_apache_src."
+}
 # =============================================================================
 # NGINX
 # =============================================================================
@@ -691,7 +758,7 @@ EOF
     sudo systemctl enable tomcat > /dev/null 2>&1
     sudo systemctl restart tomcat
 
-    sleep 3
+    sleep 8
     if systemctl is-active tomcat --quiet; then
         log_ok "Tomcat corriendo en puerto $puerto."
         echo ""
