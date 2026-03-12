@@ -570,8 +570,8 @@ function instalar_tomcat() {
 
     # Verificar Java
     if ! command -v java &>/dev/null; then
-        log_info "Java no encontrado. Instalando OpenJDK 17..."
-        sudo dnf install -y java-17-openjdk java-17-openjdk-devel > /dev/null 2>&1
+        log_info "Java no encontrado. Instalando OpenJDK 21..."
+        sudo dnf install -y java-21-openjdk java-21-openjdk-devel > /dev/null 2>&1
         if ! command -v java &>/dev/null; then
             log_err "No se pudo instalar Java. Tomcat requiere Java."
             return 1
@@ -658,14 +658,14 @@ function instalar_tomcat() {
 <html>
 <head><meta charset="UTF-8"><title>Tomcat - Administración de Sistemas</title></head>
 <body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f0ff">
-  <h1 style="color:#e67e22">☕ Apache Tomcat</h1>
+  <h1 style="color:#e67e22">Apache Tomcat</h1>
   <table style="margin:auto;border-collapse:collapse;width:400px">
     <tr style="background:#e67e22;color:white">
       <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
     </tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
         <td style="padding:8px;border:1px solid #ddd">Apache Tomcat</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
+    <tr><td style="padding:8px;border:1px solid #ddd">Version</td>
         <td style="padding:8px;border:1px solid #ddd">$version_str</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
         <td style="padding:8px;border:1px solid #ddd">$puerto</td></tr>
