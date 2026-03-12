@@ -37,7 +37,6 @@ function crear_estructura_directorios() {
     sudo chown root:root /srv/ftp
     sudo chmod 755 /srv/ftp
 
-    # general: todos los usuarios autenticados pueden leer y escribir
     sudo chmod 777 /srv/ftp/general
     sudo chmod 770 /srv/ftp/reprobados
     sudo chmod 770 /srv/ftp/recursadores
@@ -57,86 +56,7 @@ function crear_estructura_directorios() {
     sudo chgrp recursadores /srv/ftp/recursadores
     sudo chown root:ftp    /srv/ftp/general
 
-    # ── Directorio para usuario anónimo ──────────────────────────────────────
-    # vsftpd con chroot_local_user=YES ignora anon_root; el usuario "ftp" del
-    # sistema aterriza en su home directory. Lo apuntamos a /srv/ftp/anonymous
-    # con solo /general adentro (solo lectura para anonymous).
-    echo "[INFO] Configurando directorio para acceso anónimo..."
-    sudo mkdir -p /srv/ftp/anonymous/general
-    sudo chown root:root /srv/ftp/anonymous
-    sudo chmod 755 /srv/ftp/anonymous          # raíz del chroot: NO escribible
-    sudo chown root:root /srv/ftp/anonymous/general
-    sudo chmod 755 /srv/ftp/anonymous/general  # mount point: NO escribible
-
-    # Montar /srv/ftp/general dentro del chroot anonymous
-    if ! mountpoint -q /srv/ftp/anonymous/general 2>/dev/null; then
-        sudo mount --bind /srv/ftp/general /srv/ftp/anonymous/general
-    fi
-    if ! grep -q "anonymous/general" /etc/fstab; then
-        echo "/srv/ftp/general  /srv/ftp/anonymous/general  none  bind  0 0" \
-            | sudo tee -a /etc/fstab > /dev/null
-    fi
-
-    # Cambiar home del usuario ftp del sistema a /srv/ftp/anonymous
-    sudo usermod -d /srv/ftp/anonymous ftp 2>/dev/null
-
     echo "[OK] Estructura de directorios creada."
-}
-
-# Función para reparar bind mounts de todos los usuarios existentes
-# (útil tras reinicio del servidor o si se crearon usuarios manualmente)
-function reparar_mounts_usuarios() {
-    echo "[INFO] Verificando y reparando bind mounts de usuarios FTP..."
-
-    local reparados=0
-
-    # Obtener todos los usuarios de ambos grupos
-    for usuario in $(getent group reprobados recursadores | cut -d: -f4 | tr ',' '\n' | sort -u); do
-        [ -z "$usuario" ] && continue
-        ! id "$usuario" &>/dev/null && continue
-
-        grupo=$(id -gn "$usuario" 2>/dev/null)
-        [[ "$grupo" != "reprobados" && "$grupo" != "recursadores" ]] && continue
-
-        # Verificar y montar /general
-        sudo mkdir -p /srv/ftp/$usuario/general
-        if ! mountpoint -q /srv/ftp/$usuario/general 2>/dev/null; then
-            sudo mount --bind /srv/ftp/general /srv/ftp/$usuario/general
-            echo "  [MOUNT] $usuario/general"
-            ((reparados++))
-        fi
-        if ! grep -q "/srv/ftp/$usuario/general" /etc/fstab; then
-            echo "/srv/ftp/general  /srv/ftp/$usuario/general  none  bind  0 0" \
-                | sudo tee -a /etc/fstab > /dev/null
-        fi
-
-        # Verificar y montar carpeta de grupo
-        sudo mkdir -p /srv/ftp/$usuario/$grupo
-        if ! mountpoint -q /srv/ftp/$usuario/$grupo 2>/dev/null; then
-            sudo mount --bind /srv/ftp/$grupo /srv/ftp/$usuario/$grupo
-            echo "  [MOUNT] $usuario/$grupo"
-            ((reparados++))
-        fi
-        if ! grep -q "/srv/ftp/$usuario/$grupo" /etc/fstab; then
-            echo "/srv/ftp/$grupo  /srv/ftp/$usuario/$grupo  none  bind  0 0" \
-                | sudo tee -a /etc/fstab > /dev/null
-        fi
-    done
-
-    # Verificar anonymous — usa anon-general (755) no general (777)
-    if ! mountpoint -q /srv/ftp/anonymous/general 2>/dev/null; then
-        sudo mount --bind /srv/ftp/anon-general /srv/ftp/anonymous/general
-        echo "  [MOUNT] anonymous/general"
-        ((reparados++))
-    fi
-
-    sudo systemctl daemon-reload
-
-    if [ $reparados -eq 0 ]; then
-        echo "[OK] Todos los bind mounts están activos. No se requirió reparación."
-    else
-        echo "[OK] Se repararon $reparados bind mount(s)."
-    fi
 }
 
 # Función para configurar vsftpd.conf y PAM
@@ -148,12 +68,10 @@ function configurar_vsftpd() {
             /etc/vsftpd/vsftpd.conf.backup.$(date +%Y%m%d_%H%M%S)
     fi
 
-    # FIX 1: anon_root es ignorado cuando chroot_local_user=YES está activo.
-    #         vsftpd usa el home del usuario "ftp" del sistema como raíz.
-    #         La solución: user_config_dir con chroot_local_user=NO solo para ftp.
+    # FIX 1: anon_root=/srv/ftp/general — anonymous aterriza en /general
+    #         y no puede ver carpetas de otros usuarios
     # FIX 2: local_root declarado UNA sola vez con user_sub_token=$USER
-    # FIX 5: anonymous/general con 777 causa "writable root inside chroot"
-    #         Se usa /srv/ftp/anon-general (755) como origen del bind mount.
+    #         (estaba duplicado, la 2ª línea pisaba la 1ª y rompía el sub_token)
     sudo tee /etc/vsftpd/vsftpd.conf > /dev/null <<'EOF'
 # Configuración básica
 anonymous_enable=YES
@@ -166,8 +84,8 @@ connect_from_port_20=YES
 xferlog_std_format=YES
 
 # Acceso anónimo
-# anon_root es ignorado con chroot_local_user=YES
-# El usuario ftp aterriza en su home (/srv/ftp/anonymous) via user_config_dir
+# anonymous aterriza en /general y solo ve esa carpeta (sin acceso al resto)
+anon_root=/srv/ftp/general
 no_anon_password=YES
 anon_upload_enable=NO
 anon_mkdir_write_enable=NO
@@ -178,9 +96,6 @@ user_sub_token=$USER
 local_root=/srv/ftp/$USER
 chroot_local_user=YES
 allow_writeable_chroot=YES
-
-# Configuración por usuario (excluye a ftp/anonymous del chroot)
-user_config_dir=/etc/vsftpd/users
 
 # Seguridad
 seccomp_sandbox=NO
@@ -207,36 +122,6 @@ ftpd_banner=Bienvenido al servidor FTP - Administracion de Sistemas
 EOF
 
     echo "[OK] vsftpd.conf configurado."
-
-    # Crear user_config_dir y config especifica para ftp (anonymous)
-    # El usuario ftp NO debe tener chroot para que aterrice en /srv/ftp/anonymous
-    # con solo /general adentro (755, no escribible)
-    sudo mkdir -p /etc/vsftpd/users
-    sudo tee /etc/vsftpd/users/ftp > /dev/null <<'EOF'
-local_root=/srv/ftp/anonymous
-chroot_local_user=NO
-EOF
-    echo "[OK] user_config_dir configurado (ftp sin chroot)."
-
-    # Crear /srv/ftp/anon-general como origen 755 para el bind mount de anonymous
-    # No se puede usar /srv/ftp/general (777) porque vsftpd rechaza directorios
-    # escribibles dentro del chroot de anonymous
-    sudo mkdir -p /srv/ftp/anon-general
-    sudo chmod 755 /srv/ftp/anon-general
-    sudo chown root:root /srv/ftp/anon-general
-    # Sincronizar contexto SELinux
-    sudo semanage fcontext -a -t public_content_t "/srv/ftp/anon-general(/.*)?" 2>/dev/null
-    sudo restorecon -Rv /srv/ftp/anon-general > /dev/null 2>&1
-
-    # Actualizar bind mount de anonymous para usar anon-general en lugar de general
-    sudo umount /srv/ftp/anonymous/general 2>/dev/null
-    sudo sed -i '\|/srv/ftp/general.*anonymous/general|d' /etc/fstab
-    sudo sed -i '\|/srv/ftp/anon-general.*anonymous/general|d' /etc/fstab
-    sudo mount --bind /srv/ftp/anon-general /srv/ftp/anonymous/general
-    echo "/srv/ftp/anon-general  /srv/ftp/anonymous/general  none  bind  0 0" \
-        | sudo tee -a /etc/fstab > /dev/null
-    sudo systemctl daemon-reload
-    echo "[OK] Bind mount de anonymous apunta a anon-general (755)."
 
     # Inicializar user_list con las entradas base obligatorias
     sudo touch /etc/vsftpd/user_list
@@ -295,7 +180,6 @@ function instalar_configurar_completo() {
     configurar_vsftpd
     configurar_firewall
     configurar_selinux
-    reparar_mounts_usuarios
 
     sudo systemctl enable vsftpd > /dev/null 2>&1
     sudo systemctl restart vsftpd
