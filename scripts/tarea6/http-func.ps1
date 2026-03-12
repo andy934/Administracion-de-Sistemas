@@ -386,12 +386,24 @@ function Instalar-Apache-Win {
     Configurar-Firewall -Puerto $puertoNum
 
     if (Test-Path "$apacheDir\bin\httpd.exe") {
-        & "$apacheDir\bin\httpd.exe" -k install -n "Apache$puertoNum" 2>$null
-        Start-Service "Apache$puertoNum" -ErrorAction SilentlyContinue
+        # Verificar si el servicio Apache ya existe (chocolatey lo instala como "Apache")
+        $svcExistente = Get-Service "Apache" -ErrorAction SilentlyContinue
+        if ($svcExistente) {
+            $nombreServicio = "Apache"
+        } else {
+            & "$apacheDir\bin\httpd.exe" -k install -n "Apache$puertoNum" 2>$null
+            $nombreServicio = "Apache$puertoNum"
+        }
+
+        # Reiniciar para aplicar nuevo puerto
+        Stop-Service $nombreServicio -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+        Start-Service $nombreServicio -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
 
-        if ((Get-Service "Apache$puertoNum" -ErrorAction SilentlyContinue).Status -eq 'Running') {
-            Write-OK "Apache corriendo en puerto $puertoNum."
+        $svc = Get-Service $nombreServicio -ErrorAction SilentlyContinue
+        if ($svc -and $svc.Status -eq 'Running') {
+            Write-OK "Apache corriendo en puerto $puertoNum. (servicio: $nombreServicio)"
             Write-Host ""
             Write-Host "Verificacion con curl:" -ForegroundColor Green
             curl.exe -sI "http://localhost:$puertoNum" 2>$null | Select-Object -First 6
