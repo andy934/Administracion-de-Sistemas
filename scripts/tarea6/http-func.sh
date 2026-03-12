@@ -691,7 +691,7 @@ EOF
     sudo systemctl enable tomcat > /dev/null 2>&1
     sudo systemctl restart tomcat
 
-    sleep 3
+    sleep 8
     if systemctl is-active tomcat --quiet; then
         log_ok "Tomcat corriendo en puerto $puerto."
         echo ""
