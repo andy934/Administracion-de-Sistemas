@@ -3,7 +3,9 @@
 # http_main.sh — Script principal (solo llamadas a funciones)
 # Práctica 6 — Despliegue Dinámico de Servicios HTTP Multi-Version
 # =============================================================================
-. ./http-func.sh
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/http_functions.sh"
 
 # ─── Colores (heredados de functions) ────────────────────────────────────────
 function mostrar_banner() {
