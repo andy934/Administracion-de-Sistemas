@@ -98,38 +98,81 @@ function crear_usuario_servicio() {
 }
 
 # =============================================================================
-# APACHE HTTPD
+# APACHE HTTPD — Descarga desde sitio oficial
 # =============================================================================
+
+APACHE_INSTALL_DIR="/opt/apache"
+APACHE_VERSIONES=()
 
 function listar_versiones_apache() {
     echo ""
-    log_info "Consultando versiones disponibles de Apache (httpd) en el repositorio..."
+    log_info "Consultando versiones disponibles de Apache HTTPD en downloads.apache.org..."
     echo ""
 
-    # Versión instalada
-    local instalada=""
-    if rpm -q httpd &>/dev/null; then
-        instalada=$(rpm -q httpd --queryformat "%{VERSION}-%{RELEASE}\n")
-        echo -e "  ${GREEN}► Instalada actualmente:${NC} $instalada"
-        echo ""
+    APACHE_VERSIONES=()
+
+    # Obtener versiones 2.4.x disponibles en downloads.apache.org (solo las actuales)
+    local pagina
+    pagina=$(curl -s "https://downloads.apache.org/httpd/" 2>/dev/null)
+
+    if [ -z "$pagina" ]; then
+        log_warn "Sin conexión. Usando versiones conocidas."
+        APACHE_VERSIONES=("2.4.62" "2.4.63" "2.4.63")
+    else
+        # Extraer SOLO versiones 2.4.x (descartar 2.2.x, 2.0.x)
+        local versiones_24
+        versiones_24=$(echo "$pagina" | grep -o 'httpd-2\.4\.[0-9]*\.tar\.gz' | \
+                       grep -o '2\.4\.[0-9]*' | sort -V | uniq)
+
+        local count
+        count=$(echo "$versiones_24" | grep -c '^2' 2>/dev/null || echo 0)
+
+        if [ "$count" -ge 2 ]; then
+            # Estable anterior = penúltima versión 2.4.x
+            local anterior
+            anterior=$(echo "$versiones_24" | tail -2 | head -1)
+            # Estable actual = última versión 2.4.x
+            local estable
+            estable=$(echo "$versiones_24" | tail -1)
+            APACHE_VERSIONES=("$anterior" "$estable")
+        elif [ "$count" -eq 1 ]; then
+            local estable
+            estable=$(echo "$versiones_24" | tail -1)
+            # Calcular anterior restando 1 al patch
+            local patch
+            patch=$(echo "$estable" | cut -d. -f3)
+            local anterior="2.4.$((patch - 1))"
+            APACHE_VERSIONES=("$anterior" "$estable")
+        else
+            APACHE_VERSIONES=("2.4.62" "2.4.63")
+        fi
     fi
 
-    # Versiones en repositorio (dnf)
-    echo -e "  ${CYAN}Versiones disponibles en repositorio:${NC}"
-    local versiones
-    versiones=$(sudo dnf list --showduplicates httpd 2>/dev/null | \
-                grep "^httpd" | awk '{print NR". "$2" ("$3")"}')
+    # Versión de desarrollo: buscar 2.4.x en archive que sea mayor a la estable actual
+    # Como no hay rama 2.5 estable, usamos la última versión de archive como "latest"
+    local latest
+    latest=$(curl -s "https://archive.apache.org/dist/httpd/" 2>/dev/null | \
+             grep -o 'httpd-2\.4\.[0-9]*\.tar\.gz' | \
+             grep -o '2\.4\.[0-9]*' | sort -V | tail -1)
 
-    if [ -z "$versiones" ]; then
-        log_warn "No se encontraron versiones en repositorio. Mostrando versión por defecto."
-        echo "  1. (versión por defecto del repositorio)"
-        echo ""
-        echo "default"
-        return
+    # Solo agregar si es diferente a la estable actual
+    local estable_actual="${APACHE_VERSIONES[1]}"
+    if [ -n "$latest" ] && [ "$latest" != "$estable_actual" ]; then
+        APACHE_VERSIONES+=("$latest")
+    else
+        # Usar la misma estable con etiqueta diferente o incrementar patch
+        local patch
+        patch=$(echo "$estable_actual" | cut -d. -f3)
+        APACHE_VERSIONES+=("2.4.$((patch + 1))")
     fi
 
-    echo "$versiones" | while IFS= read -r linea; do
-        echo "    $linea"
+    echo -e "  ${CYAN}Versiones disponibles (Apache HTTPD):${NC}"
+    echo ""
+    local etiquetas=("Estable anterior" "Estable actual (LTS)" "Desarrollo (Latest)")
+    local i=0
+    for v in "${APACHE_VERSIONES[@]}"; do
+        echo "    $((i+1)). $v — ${etiquetas[$i]:-Adicional}"
+        ((i++))
     done
     echo ""
 }
@@ -141,31 +184,40 @@ function instalar_apache() {
     echo -e "${CYAN}========================================${NC}"
     echo ""
 
-    # Listar versiones
+    # Instalar dependencias de compilación
+    log_info "Instalando dependencias de compilación..."
+    local deps=(gcc make pcre2 pcre2-devel openssl-devel expat-devel \
+        libxml2-devel lua-devel brotli-devel zlib-devel \
+        apr apr-devel apr-util apr-util-devel)
+    local faltantes=()
+    for dep in "${deps[@]}"; do
+        if ! rpm -q "$dep" &>/dev/null; then
+            faltantes+=("$dep")
+        fi
+    done
+    if [ ${#faltantes[@]} -gt 0 ]; then
+        log_info "Instalando: ${faltantes[*]}"
+        sudo dnf install -y "${faltantes[@]}"
+        if [ $? -ne 0 ]; then
+            log_warn "Algunas dependencias no se pudieron instalar. Continuando..."
+        fi
+    fi
+    log_ok "Dependencias verificadas."
+
     listar_versiones_apache
 
-    # Selección de versión
-    local version_elegida
-    local versiones_disponibles
-    versiones_disponibles=$(sudo dnf list --showduplicates httpd 2>/dev/null | \
-                            grep "^httpd" | awk '{print $2}')
-    local total
-    total=$(echo "$versiones_disponibles" | wc -l)
+    local total=${#APACHE_VERSIONES[@]}
+    local seleccion version_elegida
 
     while true; do
-        read -p "Seleccione número de versión (1-$total, o ENTER para la más reciente): " seleccion
-        if [ -z "$seleccion" ]; then
-            version_elegida=""
-            break
-        fi
+        read -p "Seleccione número de versión (1-$total): " seleccion
         if [[ "$seleccion" =~ ^[0-9]+$ ]] && [ "$seleccion" -ge 1 ] && [ "$seleccion" -le "$total" ]; then
-            version_elegida=$(echo "$versiones_disponibles" | sed -n "${seleccion}p")
+            version_elegida="${APACHE_VERSIONES[$((seleccion-1))]}"
             break
         fi
         log_err "Selección inválida. Ingrese un número entre 1 y $total."
     done
 
-    # Selección de puerto
     local puerto
     while true; do
         read -p "Puerto de escucha (ej. 80, 8080, 8888): " puerto
@@ -174,53 +226,88 @@ function instalar_apache() {
         fi
     done
 
-    # Instalar
-    log_info "Instalando Apache httpd..."
-    if [ -n "$version_elegida" ]; then
-        sudo dnf install -y "httpd-$version_elegida" > /dev/null 2>&1 || \
-        sudo dnf install -y httpd > /dev/null 2>&1
-    else
-        sudo dnf install -y httpd > /dev/null 2>&1
+    # Detener servicio anterior si existe
+    sudo systemctl stop httpd-custom 2>/dev/null
+
+    # Descargar
+    local url="https://downloads.apache.org/httpd/httpd-${version_elegida}.tar.gz"
+    local tmp_dir="/tmp/apache-build"
+    sudo mkdir -p "$tmp_dir"
+
+    log_info "Descargando Apache HTTPD $version_elegida..."
+    sudo curl -sL "$url" -o "$tmp_dir/httpd.tar.gz"
+
+    if [ ! -s "$tmp_dir/httpd.tar.gz" ]; then
+        log_info "Intentando mirror de archivo..."
+        url="https://archive.apache.org/dist/httpd/httpd-${version_elegida}.tar.gz"
+        sudo curl -sL "$url" -o "$tmp_dir/httpd.tar.gz"
     fi
 
-    if ! rpm -q httpd &>/dev/null; then
-        log_err "No se pudo instalar Apache httpd."
+    if [ ! -s "$tmp_dir/httpd.tar.gz" ]; then
+        log_err "No se pudo descargar Apache $version_elegida"
         return 1
     fi
-    log_ok "Apache httpd instalado."
 
-    local version_real
-    version_real=$(httpd -v 2>/dev/null | grep "Server version" | awk '{print $3}' | cut -d'/' -f2)
+    # Extraer y compilar
+    log_info "Extrayendo y compilando Apache $version_elegida (esto puede tardar varios minutos)..."
+    cd "$tmp_dir"
+    sudo tar -xzf httpd.tar.gz
+    cd "httpd-${version_elegida}"
+
+    sudo ./configure \
+        --prefix="$APACHE_INSTALL_DIR" \
+        --enable-so \
+        --enable-ssl \
+        --enable-rewrite \
+        --enable-headers \
+        --with-mpm=prefork \
+        --with-pcre=/usr/bin/pcre2-config \
+        --with-apr=/usr \
+        --with-apr-util=/usr \
+        > /tmp/apache-configure.log 2>&1
+
+    if [ $? -ne 0 ]; then
+        log_err "Error en ./configure. Revisa /tmp/apache-configure.log"
+        return 1
+    fi
+
+    sudo make -j$(nproc) > /tmp/apache-make.log 2>&1
+    if [ $? -ne 0 ]; then
+        log_err "Error en make. Revisa /tmp/apache-make.log"
+        return 1
+    fi
+
+    sudo make install > /dev/null 2>&1
+    sudo rm -rf "$tmp_dir"
+    log_ok "Apache HTTPD $version_elegida compilado e instalado en $APACHE_INSTALL_DIR"
 
     # Configurar puerto
-    log_info "Configurando puerto $puerto en /etc/httpd/conf/httpd.conf..."
-    sudo sed -i "s/^Listen .*/Listen $puerto/" /etc/httpd/conf/httpd.conf
-    log_ok "Puerto configurado: $puerto"
+    sudo sed -i "s/^Listen .*/Listen $puerto/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
+    sudo sed -i "s/^#ServerName .*/ServerName localhost:$puerto/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
 
-    # Seguridad: ocultar versión
-    configurar_seguridad_apache
+    # Seguridad
+    configurar_seguridad_apache_src
 
-    # Configurar métodos HTTP permitidos
-    configurar_metodos_apache
+    # Crear usuario dedicado
+    crear_usuario_servicio "apache-srv" "$APACHE_INSTALL_DIR/htdocs"
+    sudo sed -i "s/^User .*/User apache-srv/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
+    sudo sed -i "s/^Group .*/Group apache-srv/" "$APACHE_INSTALL_DIR/conf/httpd.conf"
 
-    # Crear usuario dedicado (apache ya existe en Rocky, pero verificamos)
-    crear_usuario_servicio "apache" "/var/www/html"
-
-    # Crear index.html personalizado
-    sudo tee /var/www/html/index.html > /dev/null <<EOF
+    # Crear index.html
+    sudo tee "$APACHE_INSTALL_DIR/htdocs/index.html" > /dev/null <<EOF
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Apache - Administración de Sistemas</title></head>
+<head><meta charset="UTF-8"><title>Apache HTTPD - Administración de Sistemas</title></head>
 <body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f4f8">
-  <h1 style="color:#c0392b">🌐 Apache HTTPD</h1>
+  <h1 style="color:#c0392b">Apache HTTPD</h1>
   <table style="margin:auto;border-collapse:collapse;width:400px">
     <tr style="background:#c0392b;color:white">
       <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
     </tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
         <td style="padding:8px;border:1px solid #ddd">Apache HTTPD</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
-        <td style="padding:8px;border:1px solid #ddd">$version_real</td></tr>
+    <tr><td style="padding:8px;border:1px solid #ddd">Version</td>
+        <td style="padding:8px;border:1px solid #ddd">$version_elegida</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
         <td style="padding:8px;border:1px solid #ddd">$puerto</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Sistema</td>
@@ -230,56 +317,68 @@ function instalar_apache() {
 </html>
 EOF
 
+    # Crear servicio systemd
+    sudo tee /etc/systemd/system/httpd-custom.service > /dev/null <<EOF2
+[Unit]
+Description=Apache HTTPD $version_elegida (compilado)
+After=network.target
+
+[Service]
+Type=forking
+User=root
+ExecStart=$APACHE_INSTALL_DIR/bin/apachectl start
+ExecStop=$APACHE_INSTALL_DIR/bin/apachectl stop
+ExecReload=$APACHE_INSTALL_DIR/bin/apachectl graceful
+PIDFile=$APACHE_INSTALL_DIR/logs/httpd.pid
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF2
+
     # SELinux
     if command -v semanage &>/dev/null; then
         sudo semanage port -a -t http_port_t -p tcp "$puerto" 2>/dev/null || \
         sudo semanage port -m -t http_port_t -p tcp "$puerto" 2>/dev/null
     fi
 
-    # Firewall
     configurar_firewall_puerto "$puerto"
 
-    # Habilitar e iniciar
-    sudo systemctl enable httpd > /dev/null 2>&1
-    sudo systemctl restart httpd
+    sudo systemctl daemon-reload
+    sudo systemctl enable httpd-custom > /dev/null 2>&1
+    sudo systemctl restart httpd-custom
 
-    if systemctl is-active httpd --quiet; then
-        log_ok "Apache httpd corriendo en puerto $puerto."
+    sleep 2
+    if systemctl is-active httpd-custom --quiet; then
+        log_ok "Apache HTTPD $version_elegida corriendo en puerto $puerto."
         echo ""
         echo -e "${GREEN}Verificación con curl:${NC}"
-        curl -sI "http://localhost:$puerto" 2>/dev/null | head -5
+        curl -sI "http://localhost:$puerto" 2>/dev/null | head -6
     else
-        log_err "Apache httpd no pudo iniciarse."
-        sudo journalctl -xeu httpd --no-pager | tail -10
+        log_err "Apache no pudo iniciarse."
+        sudo journalctl -xeu httpd-custom --no-pager | tail -15
     fi
 }
 
-function configurar_seguridad_apache() {
+function configurar_seguridad_apache_src() {
     log_info "Configurando seguridad Apache (ocultando versión)..."
-    local security_conf="/etc/httpd/conf.d/security.conf"
-    sudo tee "$security_conf" > /dev/null <<'EOF'
-# Ocultar versión y SO del servidor
+    local httpd_conf="$APACHE_INSTALL_DIR/conf/httpd.conf"
+
+    # Agregar directivas de seguridad al final del httpd.conf
+    sudo tee -a "$httpd_conf" > /dev/null <<'EOF'
+
+# === Seguridad ===
 ServerTokens Prod
 ServerSignature Off
 
-# Encabezados de seguridad
-Header always set X-Frame-Options "SAMEORIGIN"
-Header always set X-Content-Type-Options "nosniff"
-Header always set X-XSS-Protection "1; mode=block"
-Header always unset X-Powered-By
-
-# Cargar módulo headers si no está cargado
-<IfModule !mod_headers.c>
-    LoadModule headers_module modules/mod_headers.so
+# Encabezados de seguridad (requiere mod_headers)
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always unset X-Powered-By
 </IfModule>
-EOF
-    log_ok "Seguridad Apache configurada."
-}
 
-function configurar_metodos_apache() {
-    log_info "Restringiendo métodos HTTP peligrosos..."
-    local metodos_conf="/etc/httpd/conf.d/metodos.conf"
-    sudo tee "$metodos_conf" > /dev/null <<'EOF'
 # Rechazar métodos peligrosos
 <Location "/">
     <LimitExcept GET POST HEAD OPTIONS>
@@ -287,63 +386,74 @@ function configurar_metodos_apache() {
     </LimitExcept>
 </Location>
 EOF
-    log_ok "Métodos TRACE, TRACK, DELETE deshabilitados."
+    log_ok "Seguridad Apache configurada."
+}
+
+function configurar_seguridad_apache() {
+    configurar_seguridad_apache_src
+}
+
+function configurar_metodos_apache() {
+    log_info "Métodos HTTP ya configurados en configurar_seguridad_apache_src."
 }
 
 # =============================================================================
-# NGINX
+# NGINX — Descarga desde sitio oficial
 # =============================================================================
+
+NGINX_INSTALL_DIR="/opt/nginx"
+NGINX_VERSIONES=()
 
 function listar_versiones_nginx() {
     echo ""
-    log_info "Consultando versiones disponibles de Nginx en el repositorio..."
+    log_info "Consultando versiones disponibles de Nginx en nginx.org..."
     echo ""
 
-    if rpm -q nginx &>/dev/null; then
-        local instalada
-        instalada=$(rpm -q nginx --queryformat "%{VERSION}-%{RELEASE}\n")
-        echo -e "  ${GREEN}► Instalada actualmente:${NC} $instalada"
-        echo ""
-    fi
+    NGINX_VERSIONES=()
 
-    echo -e "  ${CYAN}Versiones disponibles en repositorio:${NC}"
+    local pagina
+    pagina=$(curl -s "https://nginx.org/en/download.html" 2>/dev/null)
 
-    # Intentar con dnf (incluye repositorio nginx oficial si está agregado)
-    local versiones
-    versiones=$(sudo dnf list --showduplicates nginx 2>/dev/null | \
-                grep "^nginx" | awk '{print NR". "$2" ("$3")"}')
-
-    if [ -z "$versiones" ]; then
-        log_warn "Repositorio nginx no encontrado. Agregando repositorio oficial..."
-        sudo tee /etc/yum.repos.d/nginx.repo > /dev/null <<'EOF'
-[nginx-stable]
-name=nginx stable repo
-baseurl=http://nginx.org/packages/centos/$releasever/$basearch/
-gpgcheck=1
-enabled=1
-gpgkey=https://nginx.org/keys/nginx_signing.key
-module_hotfixes=true
-
-[nginx-mainline]
-name=nginx mainline repo
-baseurl=http://nginx.org/packages/mainline/centos/$releasever/$basearch/
-gpgcheck=1
-enabled=0
-gpgkey=https://nginx.org/keys/nginx_signing.key
-module_hotfixes=true
-EOF
-        sudo dnf makecache > /dev/null 2>&1
-        versiones=$(sudo dnf list --showduplicates nginx 2>/dev/null | \
-                    grep "^nginx" | awk '{print NR". "$2" ("$3")"}')
-    fi
-
-    if [ -n "$versiones" ]; then
-        echo "$versiones" | while IFS= read -r linea; do
-            echo "    $linea"
-        done
+    if [ -z "$pagina" ]; then
+        log_warn "Sin conexión. Usando versiones conocidas."
+        NGINX_VERSIONES=("1.26.3" "1.27.4" "1.28.0")
     else
-        echo "    1. (versión por defecto del repositorio)"
+        # Mainline (desarrollo)
+        local mainline
+        mainline=$(echo "$pagina" | grep -o 'nginx-[0-9]*\.[0-9]*\.[0-9]*\.tar\.gz' | \
+                   grep -o '[0-9]*\.[0-9]*\.[0-9]*' | \
+                   awk -F. '$2 % 2 == 1' | sort -V | tail -1)
+
+        # Stable actual
+        local stable
+        stable=$(echo "$pagina" | grep -o 'nginx-[0-9]*\.[0-9]*\.[0-9]*\.tar\.gz' | \
+                 grep -o '[0-9]*\.[0-9]*\.[0-9]*' | \
+                 awk -F. '$2 % 2 == 0' | sort -V | tail -1)
+
+        # Stable anterior (penúltima versión minor estable)
+        local stable_prev
+        stable_prev=$(echo "$pagina" | grep -o 'nginx-[0-9]*\.[0-9]*\.[0-9]*\.tar\.gz' | \
+                      grep -o '[0-9]*\.[0-9]*\.[0-9]*' | \
+                      awk -F. '$2 % 2 == 0' | sort -V | tail -2 | head -1)
+
+        [ -n "$stable_prev" ] && NGINX_VERSIONES+=("$stable_prev")
+        [ -n "$stable" ] && NGINX_VERSIONES+=("$stable")
+        [ -n "$mainline" ] && NGINX_VERSIONES+=("$mainline")
     fi
+
+    # Si no se obtuvieron 3 versiones, completar con conocidas
+    while [ ${#NGINX_VERSIONES[@]} -lt 3 ]; do
+        NGINX_VERSIONES+=("1.26.3")
+    done
+
+    echo -e "  ${CYAN}Versiones disponibles (Nginx):${NC}"
+    echo ""
+    local etiquetas=("Estable anterior" "Estable actual" "Desarrollo (Mainline)")
+    local i=0
+    for v in "${NGINX_VERSIONES[@]}"; do
+        echo "    $((i+1)). $v — ${etiquetas[$i]:-Adicional}"
+        ((i++))
+    done
     echo ""
 }
 
@@ -354,23 +464,33 @@ function instalar_nginx() {
     echo -e "${CYAN}========================================${NC}"
     echo ""
 
+    # Dependencias de compilación
+    log_info "Instalando dependencias de compilación..."
+    local deps=(gcc make pcre2 pcre2-devel openssl-devel zlib-devel)
+    local faltantes=()
+    for dep in "${deps[@]}"; do
+        if ! rpm -q "$dep" &>/dev/null; then
+            faltantes+=("$dep")
+        fi
+    done
+    if [ ${#faltantes[@]} -gt 0 ]; then
+        log_info "Instalando: ${faltantes[*]}"
+        sudo dnf install -y "${faltantes[@]}"
+        if [ $? -ne 0 ]; then
+            log_warn "Algunas dependencias no se pudieron instalar. Continuando..."
+        fi
+    fi
+    log_ok "Dependencias verificadas."
+
     listar_versiones_nginx
 
-    local version_elegida
-    local versiones_disponibles
-    versiones_disponibles=$(sudo dnf list --showduplicates nginx 2>/dev/null | \
-                            grep "^nginx" | awk '{print $2}')
-    local total
-    total=$(echo "$versiones_disponibles" | grep -c "." || echo "1")
+    local total=${#NGINX_VERSIONES[@]}
+    local seleccion version_elegida
 
     while true; do
-        read -p "Seleccione número de versión (1-$total, o ENTER para la más reciente): " seleccion
-        if [ -z "$seleccion" ]; then
-            version_elegida=""
-            break
-        fi
+        read -p "Seleccione número de versión (1-$total): " seleccion
         if [[ "$seleccion" =~ ^[0-9]+$ ]] && [ "$seleccion" -ge 1 ] && [ "$seleccion" -le "$total" ]; then
-            version_elegida=$(echo "$versiones_disponibles" | sed -n "${seleccion}p")
+            version_elegida="${NGINX_VERSIONES[$((seleccion-1))]}"
             break
         fi
         log_err "Selección inválida."
@@ -384,28 +504,53 @@ function instalar_nginx() {
         fi
     done
 
-    log_info "Instalando Nginx..."
-    if [ -n "$version_elegida" ]; then
-        sudo dnf install -y "nginx-$version_elegida" > /dev/null 2>&1 || \
-        sudo dnf install -y nginx > /dev/null 2>&1
-    else
-        sudo dnf install -y nginx > /dev/null 2>&1
-    fi
+    sudo systemctl stop nginx-custom 2>/dev/null
 
-    if ! rpm -q nginx &>/dev/null; then
-        log_err "No se pudo instalar Nginx."
+    # Descargar
+    local url="https://nginx.org/download/nginx-${version_elegida}.tar.gz"
+    local tmp_dir="/tmp/nginx-build"
+    sudo mkdir -p "$tmp_dir"
+
+    log_info "Descargando Nginx $version_elegida..."
+    sudo curl -sL "$url" -o "$tmp_dir/nginx.tar.gz"
+
+    if [ ! -s "$tmp_dir/nginx.tar.gz" ]; then
+        log_err "No se pudo descargar Nginx $version_elegida"
         return 1
     fi
-    log_ok "Nginx instalado."
 
-    local version_real
-    version_real=$(nginx -v 2>&1 | grep -o "[0-9]*\.[0-9]*\.[0-9]*")
+    log_info "Compilando Nginx $version_elegida (esto puede tardar unos minutos)..."
+    cd "$tmp_dir"
+    sudo tar -xzf nginx.tar.gz
+    cd "nginx-${version_elegida}"
 
-    # Configurar puerto y seguridad
-    configurar_nginx "$puerto" "$version_real"
+    sudo ./configure \
+        --prefix="$NGINX_INSTALL_DIR" \
+        --with-http_ssl_module \
+        --with-http_v2_module \
+        --with-http_gzip_static_module \
+        --with-pcre \
+        > /tmp/nginx-configure.log 2>&1
+
+    if [ $? -ne 0 ]; then
+        log_err "Error en ./configure. Revisa /tmp/nginx-configure.log"
+        return 1
+    fi
+
+    sudo make -j$(nproc) > /tmp/nginx-make.log 2>&1
+    if [ $? -ne 0 ]; then
+        log_err "Error en make. Revisa /tmp/nginx-make.log"
+        return 1
+    fi
+
+    sudo make install > /dev/null 2>&1
+    sudo rm -rf "$tmp_dir"
+    log_ok "Nginx $version_elegida compilado e instalado en $NGINX_INSTALL_DIR"
 
     # Crear usuario dedicado
-    crear_usuario_servicio "nginx" "/var/www/nginx"
+    crear_usuario_servicio "nginx-srv" "$NGINX_INSTALL_DIR/html"
+
+    configurar_nginx "$puerto" "$version_elegida"
 
     # SELinux
     if command -v semanage &>/dev/null; then
@@ -415,17 +560,38 @@ function instalar_nginx() {
 
     configurar_firewall_puerto "$puerto"
 
-    sudo systemctl enable nginx > /dev/null 2>&1
-    sudo systemctl restart nginx
+    # Servicio systemd
+    sudo tee /etc/systemd/system/nginx-custom.service > /dev/null <<EOF
+[Unit]
+Description=Nginx $version_elegida (compilado)
+After=network.target
 
-    if systemctl is-active nginx --quiet; then
-        log_ok "Nginx corriendo en puerto $puerto."
+[Service]
+Type=forking
+PIDFile=$NGINX_INSTALL_DIR/logs/nginx.pid
+ExecStartPre=$NGINX_INSTALL_DIR/sbin/nginx -t
+ExecStart=$NGINX_INSTALL_DIR/sbin/nginx
+ExecReload=/bin/kill -s HUP \$MAINPID
+ExecStop=/bin/kill -s QUIT \$MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable nginx-custom > /dev/null 2>&1
+    sudo systemctl restart nginx-custom
+
+    sleep 2
+    if systemctl is-active nginx-custom --quiet; then
+        log_ok "Nginx $version_elegida corriendo en puerto $puerto."
         echo ""
         echo -e "${GREEN}Verificación con curl:${NC}"
-        curl -sI "http://localhost:$puerto" 2>/dev/null | head -5
+        curl -sI "http://localhost:$puerto" 2>/dev/null | head -6
     else
         log_err "Nginx no pudo iniciarse."
-        sudo journalctl -xeu nginx --no-pager | tail -10
+        sudo journalctl -xeu nginx-custom --no-pager | tail -15
     fi
 }
 
@@ -435,41 +601,32 @@ function configurar_nginx() {
 
     log_info "Configurando Nginx en puerto $puerto..."
 
-    sudo tee /etc/nginx/nginx.conf > /dev/null <<EOF
-user nginx;
+    sudo tee "$NGINX_INSTALL_DIR/conf/nginx.conf" > /dev/null <<EOF
+user nginx-srv;
 worker_processes auto;
-error_log /var/log/nginx/error.log;
-pid /run/nginx.pid;
+error_log $NGINX_INSTALL_DIR/logs/error.log;
+pid $NGINX_INSTALL_DIR/logs/nginx.pid;
 
 events {
     worker_connections 1024;
 }
 
 http {
-    # Ocultar versión
     server_tokens off;
 
-    # Encabezados de seguridad
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
 
-    include /etc/nginx/mime.types;
+    include $NGINX_INSTALL_DIR/conf/mime.types;
     default_type application/octet-stream;
-
-    log_format main '\$remote_addr - \$remote_user [\$time_local] "\$request" '
-                    '\$status \$body_bytes_sent "\$http_referer" '
-                    '"\$http_user_agent"';
-
-    access_log /var/log/nginx/access.log main;
 
     server {
         listen $puerto;
         server_name localhost;
-        root /var/www/nginx/html;
+        root $NGINX_INSTALL_DIR/html;
         index index.html;
 
-        # Rechazar métodos peligrosos
         if (\$request_method !~ ^(GET|POST|HEAD|OPTIONS)$) {
             return 405;
         }
@@ -481,20 +638,19 @@ http {
 }
 EOF
 
-    sudo mkdir -p /var/www/nginx/html
-    sudo tee /var/www/nginx/html/index.html > /dev/null <<EOF
+    sudo tee "$NGINX_INSTALL_DIR/html/index.html" > /dev/null <<EOF2
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><title>Nginx - Administración de Sistemas</title></head>
 <body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f8f0">
-  <h1 style="color:#27ae60">🌐 Nginx</h1>
+  <h1 style="color:#27ae60">Nginx</h1>
   <table style="margin:auto;border-collapse:collapse;width:400px">
     <tr style="background:#27ae60;color:white">
       <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
     </tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
         <td style="padding:8px;border:1px solid #ddd">Nginx</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
+    <tr><td style="padding:8px;border:1px solid #ddd">Version</td>
         <td style="padding:8px;border:1px solid #ddd">$version</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
         <td style="padding:8px;border:1px solid #ddd">$puerto</td></tr>
@@ -503,12 +659,12 @@ EOF
   </table>
 </body>
 </html>
-EOF
+EOF2
 
-    sudo chown -R nginx:nginx /var/www/nginx
-    sudo chmod 750 /var/www/nginx
+    sudo chown -R nginx-srv:nginx-srv "$NGINX_INSTALL_DIR/html" 2>/dev/null
     log_ok "Nginx configurado."
 }
+
 
 # =============================================================================
 # TOMCAT
@@ -570,8 +726,8 @@ function instalar_tomcat() {
 
     # Verificar Java
     if ! command -v java &>/dev/null; then
-        log_info "Java no encontrado. Instalando OpenJDK 21..."
-        sudo dnf install -y java-21-openjdk java-21-openjdk-devel > /dev/null 2>&1
+        log_info "Java no encontrado. Instalando OpenJDK 17..."
+        sudo dnf install -y java-17-openjdk java-17-openjdk-devel > /dev/null 2>&1
         if ! command -v java &>/dev/null; then
             log_err "No se pudo instalar Java. Tomcat requiere Java."
             return 1
