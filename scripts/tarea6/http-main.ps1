@@ -4,7 +4,7 @@
 # Sistema: Windows Server 2022
 # =============================================================================
 
-. "$PSScriptRoot\http-func.ps1"
+. .\http-func.ps1
 
 function Mostrar-Banner {
     Clear-Host
@@ -50,7 +50,7 @@ function Main {
 
     while ($true) {
         Mostrar-Menu
-        $opcion = Read-Host "  Seleccione una opción"
+        $opcion = Read-Host "  Seleccione una opcion"
 
         switch ($opcion) {
             "1" {
@@ -68,7 +68,7 @@ function Main {
             "6" { Ver-Logs-Servicio }
             "7" { Desinstalar-Servicio }
             "0" { Write-Host ""; Write-Host "Saliendo..."; exit 0 }
-            default { Write-Err "Opción inválida." }
+            default { Write-Err "Opcion invalida." }
         }
 
         Write-Host ""

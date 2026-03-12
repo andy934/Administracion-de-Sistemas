@@ -14,6 +14,32 @@ function Write-Err   { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Re
 # UTILIDADES GENERALES
 # =============================================================================
 
+
+function Crear-IndexHtml {
+    param(
+        [string]$Ruta,
+        [string]$Titulo,
+        [string]$Servidor,
+        [string]$Version,
+        [int]$Puerto
+    )
+    $lb = [char]60  # <
+    $rb = [char]62  # >
+    $html  = "${lb}!DOCTYPE html${rb}${lb}html${rb}"
+    $html += "${lb}head${rb}${lb}meta charset=UTF-8${rb}${lb}title${rb}$Titulo - Administracion de Sistemas${lb}/title${rb}${lb}/head${rb}"
+    $html += "${lb}body style='font-family:Arial;text-align:center;margin-top:80px'${rb}"
+    $html += "${lb}h1${rb}$Servidor${lb}/h1${rb}"
+    $html += "${lb}table style='margin:auto;border-collapse:collapse;width:400px'${rb}"
+    $html += "${lb}tr style='background:#1a73e8;color:white'${rb}${lb}th style='padding:10px'${rb}Campo${lb}/th${rb}${lb}th style='padding:10px'${rb}Valor${lb}/th${rb}${lb}/tr${rb}"
+    $html += "${lb}tr${rb}${lb}td style='padding:8px'${rb}Servidor${lb}/td${rb}${lb}td style='padding:8px'${rb}$Servidor${lb}/td${rb}${lb}/tr${rb}"
+    $html += "${lb}tr${rb}${lb}td style='padding:8px'${rb}Version${lb}/td${rb}${lb}td style='padding:8px'${rb}$Version${lb}/td${rb}${lb}/tr${rb}"
+    $html += "${lb}tr${rb}${lb}td style='padding:8px'${rb}Puerto${lb}/td${rb}${lb}td style='padding:8px'${rb}$Puerto${lb}/td${rb}${lb}/tr${rb}"
+    $html += "${lb}tr${rb}${lb}td style='padding:8px'${rb}Sistema${lb}/td${rb}${lb}td style='padding:8px'${rb}Windows Server 2022${lb}/td${rb}${lb}/tr${rb}"
+    $html += "${lb}/table${rb}${lb}/body${rb}${lb}/html${rb}"
+    Set-Content -Path $Ruta -Value $html -Encoding UTF8
+}
+
+
 function Validar-Entrada {
     param([string]$Valor, [string]$Nombre)
     if ([string]::IsNullOrWhiteSpace($Valor)) {
@@ -158,28 +184,7 @@ function Instalar-IIS {
     if (-not $version) { $version = "10.0" }
 
     $wwwroot = "C:\inetpub\wwwroot"
-    @"
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>IIS - Administración de Sistemas</title></head>
-<body style="font-family:Arial;text-align:center;margin-top:80px;background:#e8f0fe">
-  <h1 style="color:#1a73e8">🌐 IIS (Internet Information Services)</h1>
-  <table style="margin:auto;border-collapse:collapse;width:400px">
-    <tr style="background:#1a73e8;color:white">
-      <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
-    </tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
-        <td style="padding:8px;border:1px solid #ddd">IIS</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
-        <td style="padding:8px;border:1px solid #ddd">$version</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
-        <td style="padding:8px;border:1px solid #ddd">$Puerto</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Sistema</td>
-        <td style="padding:8px;border:1px solid #ddd">Windows Server 2022</td></tr>
-  </table>
-</body>
-</html>
-"@ | Set-Content "$wwwroot\index.html" -Encoding UTF8
+    Crear-IndexHtml -Ruta "$wwwroot\index.html" -Titulo "IIS" -Servidor "IIS" -Version $version -Puerto $Puerto
 
     Configurar-Firewall -Puerto $Puerto
 
@@ -239,23 +244,26 @@ function Configurar-Seguridad-IIS {
     # Deshabilitar métodos peligrosos (TRACE, TRACK) via web.config global
     $webConfig = "C:\inetpub\wwwroot\web.config"
     if (-not (Test-Path $webConfig)) {
-        @'
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-  <system.webServer>
-    <security>
-      <requestFiltering>
-        <verbs allowUnlisted="false">
-          <add verb="GET" allowed="true" />
-          <add verb="POST" allowed="true" />
-          <add verb="HEAD" allowed="true" />
-          <add verb="OPTIONS" allowed="true" />
-        </verbs>
-      </requestFiltering>
-    </security>
-  </system.webServer>
-</configuration>
-'@ | Set-Content $webConfig -Encoding UTF8
+        $lb = [char]60
+        $rb = [char]62
+        $xmlLines = @(
+            "${lb}?xml version=`"1.0`" encoding=`"UTF-8`"?${rb}",
+            "${lb}configuration${rb}",
+            "  ${lb}system.webServer${rb}",
+            "    ${lb}security${rb}",
+            "      ${lb}requestFiltering${rb}",
+            "        ${lb}verbs allowUnlisted=`"false`"${rb}",
+            "          ${lb}add verb=`"GET`" allowed=`"true`" /${rb}",
+            "          ${lb}add verb=`"POST`" allowed=`"true`" /${rb}",
+            "          ${lb}add verb=`"HEAD`" allowed=`"true`" /${rb}",
+            "          ${lb}add verb=`"OPTIONS`" allowed=`"true`" /${rb}",
+            "        ${lb}/verbs${rb}",
+            "      ${lb}/requestFiltering${rb}",
+            "    ${lb}/security${rb}",
+            "  ${lb}/system.webServer${rb}",
+            "${lb}/configuration${rb}"
+        )
+        Set-Content -Path $webConfig -Value $xmlLines -Encoding UTF8
     }
 
     Write-OK "Seguridad IIS configurada."
@@ -388,21 +396,22 @@ function Instalar-Apache-Win {
 
     # Seguridad
     $secConf = "$apacheDir\conf\extra\httpd-security.conf"
-    @"
-ServerTokens Prod
-ServerSignature Off
-
-Header always set X-Frame-Options "SAMEORIGIN"
-Header always set X-Content-Type-Options "nosniff"
-Header always set X-XSS-Protection "1; mode=block"
-Header always unset X-Powered-By
-
-<Location "/">
-    <LimitExcept GET POST HEAD OPTIONS>
-        Require all denied
-    </LimitExcept>
-</Location>
-"@ | Set-Content $secConf -Encoding UTF8
+    $secLines = @(
+        'ServerTokens Prod',
+        'ServerSignature Off',
+        '',
+        'Header always set X-Frame-Options SAMEORIGIN',
+        'Header always set X-Content-Type-Options nosniff',
+        'Header always set X-XSS-Protection "1; mode=block"',
+        'Header always unset X-Powered-By',
+        '',
+        '<Location />',
+        '    <LimitExcept GET POST HEAD OPTIONS>',
+        '        Require all denied',
+        '    </LimitExcept>',
+        '</Location>'
+    )
+    Set-Content -Path $secConf -Value $secLines -Encoding UTF8
 
     # Incluir en httpd.conf si no está
     if ((Get-Content $httpdConf) -notmatch 'httpd-security') {
@@ -410,28 +419,7 @@ Header always unset X-Powered-By
     }
 
     # Crear index.html
-    @"
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>Apache - Administración de Sistemas</title></head>
-<body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f4f8">
-  <h1 style="color:#c0392b">🌐 Apache HTTP Server</h1>
-  <table style="margin:auto;border-collapse:collapse;width:400px">
-    <tr style="background:#c0392b;color:white">
-      <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
-    </tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
-        <td style="padding:8px;border:1px solid #ddd">Apache HTTP Server</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
-        <td style="padding:8px;border:1px solid #ddd">$versionElegida</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
-        <td style="padding:8px;border:1px solid #ddd">$puertoNum</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Sistema</td>
-        <td style="padding:8px;border:1px solid #ddd">Windows Server 2022</td></tr>
-  </table>
-</body>
-</html>
-"@ | Set-Content "$apacheDir\htdocs\index.html" -Encoding UTF8
+    Crear-IndexHtml -Ruta "$apacheDir\htdocs\index.html" -Titulo "Apache" -Servidor "Apache HTTP Server" -Version $versionElegida -Puerto $puertoNum
 
     Configurar-Firewall -Puerto $puertoNum
 
@@ -578,71 +566,43 @@ function Instalar-Nginx-Win {
     # Configurar nginx.conf
     $nginxConf = "$nginxDir\conf\nginx.conf"
     if (Test-Path $nginxConf) {
-        $confContent = @"
-worker_processes  auto;
-
-events {
-    worker_connections  1024;
-}
-
-http {
-    server_tokens off;
-
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-
-    include       mime.types;
-    default_type  application/octet-stream;
-
-    server {
-        listen       $puertoNum;
-        server_name  localhost;
-        root         html;
-        index        index.html index.htm;
-
-        if (`$request_method !~ ^(GET|POST|HEAD|OPTIONS)`$) {
-            return 405;
-        }
-
-        location / {
-            try_files `$uri `$uri/ =404;
-        }
-    }
-}
-"@
-        $confContent | Set-Content $nginxConf -Encoding UTF8
+        $lines = @(
+            'worker_processes  auto;',
+            '',
+            'events {',
+            '    worker_connections  1024;',
+            '}',
+            '',
+            'http {',
+            '    server_tokens off;',
+            '    add_header X-Frame-Options SAMEORIGIN always;',
+            '    add_header X-Content-Type-Options nosniff always;',
+            '    add_header X-XSS-Protection "1; mode=block" always;',
+            '    include       mime.types;',
+            '    default_type  application/octet-stream;',
+            '    server {',
+            "        listen       $puertoNum;",
+            '        server_name  localhost;',
+            '        root         html;',
+            '        index        index.html index.htm;',
+            '        location / {',
+            '            try_files $uri $uri/ =404;',
+            '        }',
+            '    }',
+            '}'
+        )
+        $lines | Set-Content $nginxConf -Encoding UTF8
         Write-OK "Puerto configurado: $puertoNum"
     }
 
     # Crear index.html
-    @"
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><title>Nginx - Administración de Sistemas</title></head>
-<body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f8f0">
-  <h1 style="color:#27ae60">🌐 Nginx</h1>
-  <table style="margin:auto;border-collapse:collapse;width:400px">
-    <tr style="background:#27ae60;color:white">
-      <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
-    </tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
-        <td style="padding:8px;border:1px solid #ddd">Nginx</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
-        <td style="padding:8px;border:1px solid #ddd">$versionElegida</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
-        <td style="padding:8px;border:1px solid #ddd">$puertoNum</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Sistema</td>
-        <td style="padding:8px;border:1px solid #ddd">Windows Server 2022</td></tr>
-  </table>
-</body>
-</html>
-"@ | Set-Content "$nginxDir\html\index.html" -Encoding UTF8
+    Crear-IndexHtml -Ruta "$nginxDir\html\index.html" -Titulo "Nginx" -Servidor "Nginx" -Version $versionElegida -Puerto $puertoNum
 
     Configurar-Firewall -Puerto $puertoNum
 
     # Instalar como servicio con NSSM si está disponible, sino ejecutar directo
-    $nssmPath = (Get-Command nssm -ErrorAction SilentlyContinue)?.Source
+    $nssmCmd = Get-Command nssm -ErrorAction SilentlyContinue
+    $nssmPath = if ($nssmCmd) { $nssmCmd.Source } else { $null }
     if ($nssmPath) {
         nssm install "nginx-$puertoNum" "$nginxDir\nginx.exe" 2>$null
         nssm set "nginx-$puertoNum" AppDirectory $nginxDir 2>$null
