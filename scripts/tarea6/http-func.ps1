@@ -246,33 +246,27 @@ function Listar-Versiones-Apache-Win {
 
     Asegurar-Chocolatey
     try {
-        $todasVersiones = choco list apache-httpd --all-versions 2>$null |
-                          Where-Object { $_ -match '^\d' } |
-                          ForEach-Object { ($_ -split '\s+')[0] } |
-                          Sort-Object { [version]($_ -replace '[^0-9.]','') }
+        # Choco v2: search devuelve "apache-httpd 2.4.55 [Approved]"
+        $searchResult = choco search apache-httpd --exact 2>$null
+        $version = $searchResult |
+                   Where-Object { $_ -match '^apache-httpd\s+[\d\.]+' } |
+                   ForEach-Object { if ($_ -match '^apache-httpd\s+([\d\.]+)') { $Matches[1] } } |
+                   Select-Object -First 1
 
-        if ($todasVersiones -and $todasVersiones.Count -ge 2) {
-            $count = $todasVersiones.Count
-            $script:ApacheVersiones = @(
-                $todasVersiones[$count - 2],
-                $todasVersiones[$count - 1],
-                $todasVersiones[$count - 1]
-            )
+        if ($version -and $version -match '^\d+\.\d+\.\d+') {
+            $script:ApacheVersiones = @($version, $version, $version)
         }
     } catch { }
 
     if ($script:ApacheVersiones.Count -eq 0) {
         try {
             $versWinget = winget show Apache.HTTPServer --versions 2>$null |
-                          Where-Object { $_ -match '^\d' } |
-                          Sort-Object { [version]($_ -replace '[^0-9.]','') }
-            if ($versWinget -and $versWinget.Count -ge 2) {
-                $count = $versWinget.Count
-                $script:ApacheVersiones = @(
-                    $versWinget[$count - 2],
-                    $versWinget[$count - 1],
-                    $versWinget[$count - 1]
-                )
+                          Where-Object { $_ -match '^\d+\.\d+\.\d+' } |
+                          Sort-Object { [version]$_ }
+            if ($versWinget -and $versWinget.Count -ge 1) {
+                $last = $versWinget | Select-Object -Last 1
+                $prev = if ($versWinget.Count -ge 2) { $versWinget | Select-Object -Last 2 | Select-Object -First 1 } else { $last }
+                $script:ApacheVersiones = @($prev, $last, $last)
             }
         } catch { }
     }
@@ -330,10 +324,26 @@ function Instalar-Apache-Win {
         choco install apache-httpd -y --no-progress 2>$null
     }
 
-    $apacheDir = @(
+    # Chocolatey instala apache en AppData\Roaming\Apache24 por defecto
+    $posiblesRutas = @(
         "C:\Apache24",
-        "C:\Program Files\Apache Software Foundation\Apache2.4"
-    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        "C:\Program Files\Apache Software Foundation\Apache2.4",
+        "$env:APPDATA\Apache24",
+        "$env:APPDATA\httpd-*",
+        "C:\ProgramData\chocolatey\lib\apache-httpd\tools\Apache24"
+    )
+    $apacheDir = $posiblesRutas | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if (-not $apacheDir) {
+        # Buscar donde choco lo extrae
+        $apacheDir = Get-ChildItem "$env:APPDATA" -Directory -Filter "Apache*" -ErrorAction SilentlyContinue |
+                     Select-Object -First 1 -ExpandProperty FullName
+    }
+    if (-not $apacheDir) {
+        $apacheDir = Get-ChildItem "C:\ProgramData\chocolatey\lib\apache-httpd\tools" `
+                     -Directory -Filter "Apache*" -ErrorAction SilentlyContinue |
+                     Select-Object -First 1 -ExpandProperty FullName
+    }
 
     if (-not $apacheDir) {
         Write-Err "No se encontro el directorio de instalacion de Apache."
@@ -404,9 +414,10 @@ function Listar-Versiones-Nginx-Win {
 
     Asegurar-Chocolatey
     try {
-        $todasVersiones = choco list nginx --all-versions 2>$null |
+        $todasVersiones = choco search nginx --exact 2>$null |
+                          Where-Object { $_ -match '^nginx ' } |
+                          ForEach-Object { ($_ -split '\s+')[1] } |
                           Where-Object { $_ -match '^\d' } |
-                          ForEach-Object { ($_ -split '\s+')[0] } |
                           Sort-Object { [version]($_ -replace '[^0-9.]','') }
 
         if ($todasVersiones -and $todasVersiones.Count -ge 2) {
@@ -625,7 +636,8 @@ function Cambiar-Puerto-Servicio {
             Write-OK "IIS reiniciado en puerto $puertoNum"
         }
         "2" {
-            $apacheDir = @("C:\Apache24", "C:\Program Files\Apache Software Foundation\Apache2.4") |
+            $apacheDir = @("C:\Apache24", "C:\Program Files\Apache Software Foundation\Apache2.4",
+                              "$env:APPDATA\Apache24") |
                          Where-Object { Test-Path $_ } | Select-Object -First 1
             if ($apacheDir) {
                 (Get-Content "$apacheDir\conf\httpd.conf") -replace 'Listen \d+', "Listen $puertoNum" |
@@ -666,7 +678,8 @@ function Ver-Logs-Servicio {
             if ($logFile) { Get-Content $logFile.FullName -Tail 20 }
         }
         "2" {
-            $apacheDir = @("C:\Apache24", "C:\Program Files\Apache Software Foundation\Apache2.4") |
+            $apacheDir = @("C:\Apache24", "C:\Program Files\Apache Software Foundation\Apache2.4",
+                              "$env:APPDATA\Apache24") |
                          Where-Object { Test-Path $_ } | Select-Object -First 1
             if ($apacheDir) { Get-Content "$apacheDir\logs\error.log" -Tail 20 -ErrorAction SilentlyContinue }
         }
