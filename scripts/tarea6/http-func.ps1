@@ -156,6 +156,16 @@ function Instalar-IIS {
     $wwwroot = "C:\inetpub\wwwroot"
     Crear-IndexHtml -Ruta "$wwwroot\index.html" -Titulo "IIS" -Servidor "IIS" -Version $version -Puerto $Puerto
 
+    # Asegurar que index.html sea el documento default (y remover iisstart.htm)
+    try {
+        Import-Module WebAdministration -ErrorAction SilentlyContinue
+        Add-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" `
+            -Filter "system.webServer/defaultDocument/files" `
+            -Name "." -Value @{value="index.html"} -ErrorAction SilentlyContinue
+        Remove-Item "$wwwroot\iisstart.htm" -ErrorAction SilentlyContinue
+        Remove-Item "$wwwroot\iisstart.png" -ErrorAction SilentlyContinue
+    } catch { }
+
     Configurar-Firewall -Puerto $Puerto
 
     iisreset /restart | Out-Null
