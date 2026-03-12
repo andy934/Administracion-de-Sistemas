@@ -354,8 +354,14 @@ function Instalar-Apache-Win {
 
     $httpdConf = "$apacheDir\conf\httpd.conf"
     if (Test-Path $httpdConf) {
-        (Get-Content $httpdConf) -replace 'Listen \d+', "Listen $puertoNum" |
-            Set-Content $httpdConf
+        $conf = Get-Content $httpdConf
+        # Cambiar puerto
+        $conf = $conf -replace 'Listen \d+', "Listen $puertoNum"
+        # Habilitar mod_headers (requerido para Header always set ...)
+        $conf = $conf -replace '#LoadModule headers_module', 'LoadModule headers_module'
+        # Habilitar mod_rewrite por si acaso
+        $conf = $conf -replace '#LoadModule rewrite_module', 'LoadModule rewrite_module'
+        $conf | Set-Content $httpdConf
         Write-OK "Puerto configurado: $puertoNum"
     }
 
