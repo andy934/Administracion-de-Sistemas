@@ -250,6 +250,8 @@ function instalar_apache() {
         --enable-headers \
         --with-mpm=prefork \
         --with-pcre=/usr/bin/pcre2-config \
+        --with-apr=/usr \
+        --with-apr-util=/usr \
         > /tmp/apache-configure.log 2>&1
 
     if [ $? -ne 0 ]; then
@@ -285,14 +287,14 @@ function instalar_apache() {
 <html>
 <head><meta charset="UTF-8"><title>Apache HTTPD - Administración de Sistemas</title></head>
 <body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f4f8">
-  <h1 style="color:#c0392b">🌐 Apache HTTPD</h1>
+  <h1 style="color:#c0392b">Apache HTTPD</h1>
   <table style="margin:auto;border-collapse:collapse;width:400px">
     <tr style="background:#c0392b;color:white">
       <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
     </tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
         <td style="padding:8px;border:1px solid #ddd">Apache HTTPD</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
+    <tr><td style="padding:8px;border:1px solid #ddd">Version</td>
         <td style="padding:8px;border:1px solid #ddd">$version_elegida</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
         <td style="padding:8px;border:1px solid #ddd">$puerto</td></tr>
@@ -617,14 +619,14 @@ EOF
 <html>
 <head><meta charset="UTF-8"><title>Nginx - Administración de Sistemas</title></head>
 <body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f8f0">
-  <h1 style="color:#27ae60">🌐 Nginx</h1>
+  <h1 style="color:#27ae60">Nginx</h1>
   <table style="margin:auto;border-collapse:collapse;width:400px">
     <tr style="background:#27ae60;color:white">
       <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
     </tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
         <td style="padding:8px;border:1px solid #ddd">Nginx</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
+    <tr><td style="padding:8px;border:1px solid #ddd">Version</td>
         <td style="padding:8px;border:1px solid #ddd">$version</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
         <td style="padding:8px;border:1px solid #ddd">$puerto</td></tr>
@@ -788,14 +790,14 @@ function instalar_tomcat() {
 <html>
 <head><meta charset="UTF-8"><title>Tomcat - Administración de Sistemas</title></head>
 <body style="font-family:Arial;text-align:center;margin-top:80px;background:#f0f0ff">
-  <h1 style="color:#e67e22">☕ Apache Tomcat</h1>
+  <h1 style="color:#e67e22">Apache Tomcat</h1>
   <table style="margin:auto;border-collapse:collapse;width:400px">
     <tr style="background:#e67e22;color:white">
       <th style="padding:10px">Campo</th><th style="padding:10px">Valor</th>
     </tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Servidor</td>
         <td style="padding:8px;border:1px solid #ddd">Apache Tomcat</td></tr>
-    <tr><td style="padding:8px;border:1px solid #ddd">Versión</td>
+    <tr><td style="padding:8px;border:1px solid #ddd">Version</td>
         <td style="padding:8px;border:1px solid #ddd">$version_str</td></tr>
     <tr><td style="padding:8px;border:1px solid #ddd">Puerto</td>
         <td style="padding:8px;border:1px solid #ddd">$puerto</td></tr>
