@@ -395,20 +395,36 @@ function Instalar-Apache-Win {
             $nombreServicio = "Apache$puertoNum"
         }
 
-        # Reiniciar para aplicar nuevo puerto
-        Stop-Service $nombreServicio -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 1
+        # Iniciar servicio
+        $svcAntes = Get-Service $nombreServicio -ErrorAction SilentlyContinue
+        if ($svcAntes -and $svcAntes.Status -eq 'Running') {
+            Stop-Service $nombreServicio -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        }
         Start-Service $nombreServicio -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 3
 
-        $svc = Get-Service $nombreServicio -ErrorAction SilentlyContinue
-        if ($svc -and $svc.Status -eq 'Running') {
+        # Verificar proceso httpd.exe directamente (mas confiable que el servicio)
+        $httpdProc = Get-Process httpd -ErrorAction SilentlyContinue
+        $svcDespues = Get-Service $nombreServicio -ErrorAction SilentlyContinue
+
+        if ($httpdProc -or ($svcDespues -and $svcDespues.Status -eq 'Running')) {
             Write-OK "Apache corriendo en puerto $puertoNum. (servicio: $nombreServicio)"
             Write-Host ""
             Write-Host "Verificacion con curl:" -ForegroundColor Green
             curl.exe -sI "http://localhost:$puertoNum" 2>$null | Select-Object -First 6
         } else {
-            Write-Err "Apache no pudo iniciarse. Revisa $apacheDir\logs\error.log"
+            # Intentar arrancar httpd.exe directamente como fallback
+            Write-Warn "Servicio no arranco, intentando arranque directo..."
+            Start-Process -FilePath "$apacheDir\bin\httpd.exe" -WindowStyle Hidden
+            Start-Sleep -Seconds 3
+            $httpdProc = Get-Process httpd -ErrorAction SilentlyContinue
+            if ($httpdProc) {
+                Write-OK "Apache corriendo en puerto $puertoNum (proceso directo)."
+                curl.exe -sI "http://localhost:$puertoNum" 2>$null | Select-Object -First 6
+            } else {
+                Write-Err "Apache no pudo iniciarse. Revisa $apacheDir\logs\error.log"
+            }
         }
     }
 }
