@@ -576,7 +576,9 @@ function Instalar-Nginx-Win {
             '    }',
             '}'
         )
-        Set-Content -Path $nginxConf -Value $confLines -Encoding UTF8
+        # nginx no acepta BOM - usar ASCII o UTF8 sin BOM
+        $confText = $confLines -join "`r`n"
+        [System.IO.File]::WriteAllText($nginxConf, $confText, [System.Text.UTF8Encoding]::new($false))
         Write-OK "Puerto configurado: $puertoNum"
     }
 
@@ -587,13 +589,27 @@ function Instalar-Nginx-Win {
     $nssmCmd = Get-Command nssm -ErrorAction SilentlyContinue
     $nssmPath = if ($nssmCmd) { $nssmCmd.Source } else { $null }
 
-    if ($nssmPath) {
-        nssm install "nginx-$puertoNum" "$nginxDir\nginx.exe" 2>$null
-        nssm set "nginx-$puertoNum" AppDirectory $nginxDir 2>$null
-        Start-Service "nginx-$puertoNum" -ErrorAction SilentlyContinue
-    } else {
-        Start-Process -FilePath "$nginxDir\nginx.exe" -WorkingDirectory $nginxDir -WindowStyle Hidden
+    # Matar instancia previa si existe
+    taskkill /f /im nginx.exe 2>$null | Out-Null
+    Start-Sleep -Seconds 1
+
+    # Instalar como servicio con NSSM si esta disponible
+    $nssmCmd = Get-Command nssm -ErrorAction SilentlyContinue
+    if ($nssmCmd) {
+        $svcName = "nginx-$puertoNum"
+        nssm install $svcName "$nginxDir
+ginx.exe" 2>$null
+        nssm set $svcName AppDirectory $nginxDir 2>$null
+        nssm set $svcName AppParameters "-p `"$nginxDir`"" 2>$null
+        Start-Service $svcName -ErrorAction SilentlyContinue
     }
+
+    # Siempre arrancar proceso directo (funciona aunque no haya NSSM)
+    Start-Process -FilePath "$nginxDir
+ginx.exe" `
+        -ArgumentList "-p `"$nginxDir`"" `
+        -WorkingDirectory $nginxDir `
+        -WindowStyle Hidden
 
     Start-Sleep -Seconds 2
 
@@ -604,7 +620,7 @@ function Instalar-Nginx-Win {
         Write-Host "Verificacion con curl:" -ForegroundColor Green
         curl.exe -sI "http://localhost:$puertoNum" 2>$null | Select-Object -First 6
     } else {
-        Write-Err "Nginx no pudo iniciarse."
+        Write-Err "Nginx no pudo iniciarse. Revisa $nginxDir\logs\error.log"
     }
 }
 
