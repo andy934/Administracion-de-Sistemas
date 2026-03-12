@@ -597,19 +597,19 @@ function Instalar-Nginx-Win {
     $nssmCmd = Get-Command nssm -ErrorAction SilentlyContinue
     if ($nssmCmd) {
         $svcName = "nginx-$puertoNum"
-        nssm install $svcName "$nginxDir
-ginx.exe" 2>$null
+        nssm install $svcName "$nginxDir\nginx.exe" 2>$null
+
         nssm set $svcName AppDirectory $nginxDir 2>$null
         nssm set $svcName AppParameters "-p `"$nginxDir`"" 2>$null
         Start-Service $svcName -ErrorAction SilentlyContinue
     }
 
     # Siempre arrancar proceso directo (funciona aunque no haya NSSM)
-    Start-Process -FilePath "$nginxDir
-ginx.exe" `
-        -ArgumentList "-p `"$nginxDir`"" `
-        -WorkingDirectory $nginxDir `
-        -WindowStyle Hidden
+    $nginxExe = "$nginxDir\nginx.exe"
+    Start-Process -FilePath $nginxExe -ArgumentList "-p `"$nginxDir`"" -WorkingDirectory $nginxDir -WindowStyle Hidden
+
+
+
 
     Start-Sleep -Seconds 2
 
