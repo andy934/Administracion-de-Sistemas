@@ -194,6 +194,11 @@ ssl_nginx() {
 
     info "Configurando SSL en Nginx (HTTP:$puerto_http -> HTTPS:$puerto_https)..."
 
+    # Detectar puerto HTTP actual en nginx.conf (puede no ser 80)
+    local puerto_http_actual
+    puerto_http_actual=$(grep -E "^\s+listen\s+[0-9]+;" "$nginx_dir/conf/nginx.conf" 2>/dev/null         | grep -v "ssl" | grep -oP '\d+' | head -1)
+    [ -n "$puerto_http_actual" ] && puerto_http="$puerto_http_actual"
+
     cat > "$nginx_dir/conf/nginx.conf" <<EOF
 worker_processes auto;
 error_log  $nginx_dir/logs/error.log warn;
