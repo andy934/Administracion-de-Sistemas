@@ -40,7 +40,7 @@ generar_certificado() {
     command -v openssl &>/dev/null || dnf install -y openssl &>/dev/null
 
     mkdir -p "$SSL_DIR"
-    chmod 700 "$SSL_DIR"
+    chmod 755 "$SSL_DIR"
 
     if cert_existe; then
         warn "Certificado ya existe en $SSL_DIR"
@@ -61,7 +61,7 @@ generar_certificado() {
         return 1
     fi
 
-    chmod 600 "$KEY"
+    chmod 640 "$KEY"
     chmod 644 "$CERT"
 
     ok "Certificado generado exitosamente:"
@@ -286,7 +286,12 @@ ssl_tomcat() {
     openssl pkcs12 -export \
         -in "$CERT" -inkey "$KEY" \
         -out "$p12" -passout "pass:$p12_pass" \
+        -name reprobados -legacy 2>/dev/null || \
+    openssl pkcs12 -export \
+        -in "$CERT" -inkey "$KEY" \
+        -out "$p12" -passout "pass:$p12_pass" \
         -name reprobados 2>/dev/null
+    chmod 644 "$p12"
     ok "Certificado PKCS12 generado: $p12"
 
     local server_xml="$tomcat_dir/conf/server.xml"
