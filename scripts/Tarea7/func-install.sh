@@ -5,109 +5,97 @@
 # Reutiliza funciones de Practica 6 (http-func.sh)
 # =============================================================================
 
-# Ruta al repo (relativa al script que hace source de este archivo)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 P6_FUNC="$SCRIPT_DIR/../tarea6/http-func.sh"
-P5_CONF="$SCRIPT_DIR/../tarea5/configuracion.sh"
-
-# Directorio temporal para descargas FTP
 INSTALL_TMP="/tmp/tarea7_install"
 mkdir -p "$INSTALL_TMP"
+
+# Bandera para evitar cargar P6 mas de una vez
+_P6_CARGADO=0
+
+# =============================================================================
+# CARGAR FUNCIONES DE P6 (solo si existe)
+# =============================================================================
+
+_cargar_p6() {
+    [ "$_P6_CARGADO" -eq 1 ] && return 0
+    if [ -f "$P6_FUNC" ]; then
+        # shellcheck source=/dev/null
+        source "$P6_FUNC"
+        _P6_CARGADO=1
+        return 0
+    else
+        warn "No se encontro $P6_FUNC"
+        warn "Para instalar desde WEB, los scripts de Practica 6 deben estar en:"
+        warn "  $P6_FUNC"
+        return 1
+    fi
+}
+
+# =============================================================================
+# VALIDACIONES DE DEPENDENCIAS CON RESOLUCION EN CONTEXTO
+# =============================================================================
+
+# Verifica si un servicio esta instalado; ofrece instalarlo si no
+_validar_servicio() {
+    local servicio="$1"    # apache | nginx | tomcat
+    local binario fuente_check
+
+    case "$servicio" in
+        apache) binario="/opt/apache/bin/apachectl" ;;
+        nginx)  binario="/opt/nginx/sbin/nginx"     ;;
+        tomcat) binario=$(find /opt -name "catalina.sh" 2>/dev/null | head -1) ;;
+    esac
+
+    if [ -n "$binario" ] && [ -f "$binario" ]; then
+        return 0   # ya instalado
+    fi
+
+    warn "$servicio no esta instalado"
+    read -rp "  Instalar $servicio ahora? [S/n]: " r
+    [[ "$r" =~ ^[nN]$ ]] && return 1
+
+    instalar_servicio_completo "$servicio"
+    return $?
+}
 
 # =============================================================================
 # PREGUNTAR FUENTE DE INSTALACION
 # =============================================================================
 
-elegir_fuente() {
+_elegir_fuente() {
     echo ""
     echo -e "${CYAN}  Fuente de instalacion:${NC}"
-    echo "    1. WEB  — descargar desde repositorio oficial en internet"
-    echo "    2. FTP  — descargar desde repositorio privado local"
+    echo "    1. WEB — desde repositorio oficial en internet"
+    echo "    2. FTP — desde repositorio privado local"
     echo ""
     local fuente=""
     while [[ "$fuente" != "1" && "$fuente" != "2" ]]; do
-        read -rp "  Seleccione fuente (1-2): " fuente
+        read -rp "  Seleccione fuente (1/2): " fuente
     done
-    FUENTE_INSTALACION="$fuente"   # "1"=WEB, "2"=FTP
+    FUENTE_INSTALACION="$fuente"
 }
 
 # =============================================================================
-# VERIFICAR/INSTALAR PREREQUISITOS (servidor limpio)
+# INSTALACION DESDE WEB (delega a P6)
 # =============================================================================
 
-verificar_prerequisitos() {
-    info "Verificando prerequisitos del sistema..."
+_instalar_web() {
+    local servicio="$1"
 
-    local paquetes=("curl" "wget" "openssl" "gcc" "make" "tar")
-    local faltantes=()
-    for pkg in "${paquetes[@]}"; do
-        command -v "$pkg" &>/dev/null || faltantes+=("$pkg")
-    done
+    _cargar_p6 || return 1
 
-    if [ ${#faltantes[@]} -gt 0 ]; then
-        info "Instalando paquetes base: ${faltantes[*]}"
-        dnf install -y "${faltantes[@]}" &>/dev/null
-        ok "Paquetes instalados"
-    else
-        ok "Prerequisitos satisfechos"
-    fi
-}
-
-# =============================================================================
-# VERIFICAR/INSTALAR VSFTPD (P5)
-# =============================================================================
-
-verificar_vsftpd() {
-    if systemctl is-active vsftpd &>/dev/null; then
-        ok "vsftpd activo"
-        return 0
-    fi
-
-    warn "vsftpd no esta activo"
-    read -rp "  Instalar/iniciar vsftpd ahora? [S/n]: " resp
-    [[ "$resp" =~ ^[nN]$ ]] && return 1
-
-    if [ -f "$P5_CONF" ]; then
-        info "Iniciando configuracion de vsftpd (Practica 5)..."
-        bash "$P5_CONF"
-    else
-        info "Instalando vsftpd..."
-        dnf install -y vsftpd &>/dev/null
-        systemctl enable --now vsftpd
-        ok "vsftpd instalado e iniciado"
-    fi
-}
-
-# =============================================================================
-# INSTALAR SERVICIO DESDE WEB (delega a P6)
-# =============================================================================
-
-instalar_desde_web() {
-    local servicio="$1"   # apache | nginx | tomcat
-
-    if [ ! -f "$P6_FUNC" ]; then
-        err "No se encontro $P6_FUNC"
-        err "Asegurate de que la estructura del repo sea correcta"
-        return 1
-    fi
-
-    info "Cargando funciones de instalacion (Practica 6)..."
-    # shellcheck source=/dev/null
-    source "$P6_FUNC"
-
+    info "Instalando $servicio desde WEB (Practica 6)..."
     case "$servicio" in
         apache)
-            info "Instalando Apache HTTPD desde WEB..."
             listar_versiones_apache
             instalar_apache
             ;;
         nginx)
-            info "Instalando Nginx desde WEB..."
             listar_versiones_nginx
             instalar_nginx
             ;;
         tomcat)
-            info "Instalando Tomcat desde WEB..."
             listar_versiones_tomcat
             instalar_tomcat
             ;;
@@ -119,13 +107,15 @@ instalar_desde_web() {
 }
 
 # =============================================================================
-# INSTALAR SERVICIO DESDE FTP
+# INSTALACION DESDE FTP
 # =============================================================================
 
-instalar_desde_ftp() {
-    local servicio="$1"   # apache | nginx | tomcat
+_instalar_ftp() {
+    local servicio="$1"
 
-    # Capitalizar para coincidir con estructura FTP
+    # Validar que el repo este listo antes de intentar usarlo
+    _validar_repo || return 1
+
     local svc_dir
     case "$servicio" in
         apache) svc_dir="Apache" ;;
@@ -134,101 +124,117 @@ instalar_desde_ftp() {
         *)      err "Servicio desconocido: $servicio"; return 1 ;;
     esac
 
-    # Navegar FTP y seleccionar archivo
-    seleccionar_desde_ftp "$svc_dir"
-    if [ $? -ne 0 ]; then
-        err "No se pudo seleccionar archivo del repositorio FTP"
-        return 1
-    fi
+    # Navegar repo y seleccionar archivo
+    seleccionar_desde_ftp "$svc_dir" || return 1
 
     # Descargar binario
     local destino="$INSTALL_TMP/$ARCHIVO_FTP_SELECCIONADO"
-    descargar_ftp "$RUTA_FTP_SELECCIONADA" "$destino"
-    if [ $? -ne 0 ]; then
-        err "Error en la descarga del binario"
-        return 1
+    descargar_ftp "$RUTA_FTP_SELECCIONADA" "$destino" || return 1
+
+    # Verificar integridad SHA256
+    echo ""
+    verificar_hash "$destino" "${RUTA_FTP_SELECCIONADA}.sha256"
+    local hash_ok=$?
+
+    if [ "$hash_ok" -ne 0 ]; then
+        echo ""
+        read -rp "  Hash no coincide. Continuar de todas formas? [s/N]: " forzar
+        [[ "$forzar" =~ ^[sS]$ ]] || { rm -f "$destino"; return 1; }
+        warn "Continuando con archivo sin verificar integridad"
     fi
 
-    # Verificar hash
-    local ruta_hash="${RUTA_FTP_SELECCIONADA}.sha256"
-    verificar_hash "$destino" "$ruta_hash"
-    if [ $? -ne 0 ]; then
-        err "Verificacion de integridad fallida"
-        read -rp "  Continuar de todas formas? [s/N]: " forzar
-        [[ "$forzar" =~ ^[sS]$ ]] || return 1
-    fi
-
-    # Instalar segun tipo de archivo
-    info "Instalando $servicio desde archivo local: $destino"
+    # Instalar desde tarball local
+    echo ""
+    info "Instalando $servicio desde archivo local verificado..."
     case "$servicio" in
-        apache) instalar_apache_desde_tarball "$destino" ;;
-        nginx)  instalar_nginx_desde_tarball  "$destino" ;;
-        tomcat) instalar_tomcat_desde_tarball "$destino" ;;
+        apache) _instalar_apache_tarball "$destino" ;;
+        nginx)  _instalar_nginx_tarball  "$destino" ;;
+        tomcat) _instalar_tomcat_tarball "$destino" ;;
     esac
 }
 
 # =============================================================================
-# INSTALACION MANUAL DESDE TARBALL (sin P6 - para uso desde FTP)
+# COMPILACION DESDE TARBALL — APACHE
 # =============================================================================
 
-instalar_apache_desde_tarball() {
+_instalar_apache_tarball() {
     local tarball="$1"
     local version
     version=$(basename "$tarball" | grep -oP '\d+\.\d+\.\d+')
-    local build_dir="/tmp/httpd-build"
+    local build_dir="/tmp/httpd-build-$$"
     local install_dir="/opt/apache"
 
-    info "Instalando Apache $version desde tarball..."
+    info "Compilando Apache $version..."
 
-    # Dependencias
     dnf install -y gcc make pcre2-devel openssl-devel expat-devel \
         apr apr-devel apr-util apr-util-devel zlib-devel &>/dev/null
 
     mkdir -p "$build_dir"
     tar -xjf "$tarball" -C "$build_dir" --strip-components=1 2>/dev/null || \
-    tar -xzf "$tarball" -C "$build_dir" --strip-components=1 2>/dev/null
+        tar -xzf "$tarball" -C "$build_dir" --strip-components=1 2>/dev/null
 
     cd "$build_dir" || return 1
     ./configure --prefix="$install_dir" \
         --enable-so --enable-ssl --enable-rewrite \
-        --with-mpm=prefork --with-pcre=/usr/bin/pcre2-config \
-        &>/tmp/apache_configure.log
+        --with-mpm=prefork \
+        --with-pcre=/usr/bin/pcre2-config \
+        > /tmp/apache_conf.log 2>&1
 
-    make -j"$(nproc)" &>/tmp/apache_make.log
-    make install &>/tmp/apache_install.log
+    make -j"$(nproc)" > /tmp/apache_make.log 2>&1
+    make install      > /tmp/apache_inst.log 2>&1
+
+    # Configuracion de seguridad basica
+    cat >> "$install_dir/conf/httpd.conf" <<'EOF'
+
+# Seguridad basica - Practica 7
+ServerTokens Prod
+ServerSignature Off
+LoadModule headers_module modules/mod_headers.so
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-Content-Type-Options "nosniff"
+EOF
+
+    # Pagina de inicio
+    cat > "$install_dir/htdocs/index.html" <<EOF
+<html><body style="font-family:Arial;text-align:center;margin-top:80px">
+<h1>Apache HTTPD $version</h1>
+<p>Puerto: configurado | Sistema: Rocky Linux | Instalado desde: FTP</p>
+</body></html>
+EOF
 
     # Servicio systemd
     cat > /etc/systemd/system/httpd-custom.service <<EOF
 [Unit]
 Description=Apache HTTPD $version (Tarea 7)
 After=network.target
-
 [Service]
 Type=forking
 ExecStart=$install_dir/bin/apachectl start
 ExecStop=$install_dir/bin/apachectl stop
 ExecReload=$install_dir/bin/apachectl graceful
 PIDFile=$install_dir/logs/httpd.pid
-
 [Install]
 WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
     systemctl enable --now httpd-custom 2>/dev/null
-
     cd / && rm -rf "$build_dir"
     ok "Apache $version instalado en $install_dir"
 }
 
-instalar_nginx_desde_tarball() {
+# =============================================================================
+# COMPILACION DESDE TARBALL — NGINX
+# =============================================================================
+
+_instalar_nginx_tarball() {
     local tarball="$1"
     local version
     version=$(basename "$tarball" | grep -oP '\d+\.\d+\.\d+')
-    local build_dir="/tmp/nginx-build"
+    local build_dir="/tmp/nginx-build-$$"
     local install_dir="/opt/nginx"
 
-    info "Instalando Nginx $version desde tarball..."
+    info "Compilando Nginx $version..."
 
     dnf install -y gcc make pcre2-devel openssl-devel zlib-devel &>/dev/null
 
@@ -241,49 +247,50 @@ instalar_nginx_desde_tarball() {
         --with-http_v2_module \
         --with-http_gzip_static_module \
         --with-pcre \
-        &>/tmp/nginx_configure.log
+        > /tmp/nginx_conf.log 2>&1
 
-    make -j"$(nproc)" &>/tmp/nginx_make.log
-    make install &>/tmp/nginx_install.log
+    make -j"$(nproc)" > /tmp/nginx_make.log 2>&1
+    make install      > /tmp/nginx_inst.log 2>&1
 
     cat > /etc/systemd/system/nginx-custom.service <<EOF
 [Unit]
 Description=Nginx $version (Tarea 7)
 After=network.target
-
 [Service]
 Type=forking
 ExecStart=$install_dir/sbin/nginx
 ExecStop=$install_dir/sbin/nginx -s stop
 ExecReload=$install_dir/sbin/nginx -s reload
 PIDFile=$install_dir/logs/nginx.pid
-
 [Install]
 WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
     systemctl enable --now nginx-custom 2>/dev/null
-
     cd / && rm -rf "$build_dir"
     ok "Nginx $version instalado en $install_dir"
 }
 
-instalar_tomcat_desde_tarball() {
+# =============================================================================
+# INSTALACION DESDE TARBALL — TOMCAT
+# =============================================================================
+
+_instalar_tomcat_tarball() {
     local tarball="$1"
     local version
     version=$(basename "$tarball" | grep -oP '\d+\.\d+\.\d+')
     local install_dir="/opt/tomcat-$version"
 
-    info "Instalando Tomcat $version desde tarball..."
+    info "Instalando Tomcat $version..."
 
     dnf install -y java-21-openjdk &>/dev/null
 
     mkdir -p "$install_dir"
     tar -xzf "$tarball" -C "$install_dir" --strip-components=1
 
-    # Usuario dedicado
-    id tomcat &>/dev/null || useradd -r -d "$install_dir" -s /sbin/nologin tomcat
+    id tomcat &>/dev/null || \
+        useradd -r -d "$install_dir" -s /sbin/nologin tomcat
     chown -R tomcat:tomcat "$install_dir"
     chmod +x "$install_dir/bin"/*.sh
 
@@ -294,7 +301,6 @@ instalar_tomcat_desde_tarball() {
 [Unit]
 Description=Apache Tomcat $version (Tarea 7)
 After=network.target
-
 [Service]
 Type=forking
 User=tomcat
@@ -304,14 +310,12 @@ Environment="CATALINA_HOME=$install_dir"
 ExecStart=$install_dir/bin/startup.sh
 ExecStop=$install_dir/bin/shutdown.sh
 Restart=on-failure
-
 [Install]
 WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
     systemctl enable --now tomcat 2>/dev/null
-
     ok "Tomcat $version instalado en $install_dir"
 }
 
@@ -320,40 +324,79 @@ EOF
 # =============================================================================
 
 instalar_servicio_completo() {
-    local servicio="$1"   # apache | nginx | tomcat
+    local servicio="$1"
 
     echo ""
     echo -e "${CYAN}══════════════════════════════════════════${NC}"
     echo -e "${CYAN}   INSTALACION: $(echo "$servicio" | tr '[:lower:]' '[:upper:]')${NC}"
     echo -e "${CYAN}══════════════════════════════════════════${NC}"
+    echo ""
 
-    elegir_fuente
+    _elegir_fuente
 
     if [ "$FUENTE_INSTALACION" = "1" ]; then
-        instalar_desde_web "$servicio"
+        _instalar_web "$servicio" || return 1
     else
-        instalar_desde_ftp "$servicio"
-    fi
-
-    if [ $? -ne 0 ]; then
-        err "Instalacion de $servicio fallida"
-        return 1
+        _instalar_ftp "$servicio" || return 1
     fi
 
     ok "$servicio instalado correctamente"
 
     # Preguntar SSL
     echo ""
-    read -rp "  Activar SSL/TLS en $servicio? [S/n]: " activar_ssl
+    read -rp "  Activar SSL/TLS en $servicio ahora? [S/n]: " activar_ssl
     if [[ ! "$activar_ssl" =~ ^[nN]$ ]]; then
+        _validar_cert || { warn "SSL omitido (sin certificado)"; return 0; }
+
         local puerto_https
-        read -rp "  Puerto HTTPS (default: 443): " puerto_https
-        puerto_https="${puerto_https:-443}"
+        case "$servicio" in
+            apache) read -rp "  Puerto HTTPS [443]: " puerto_https; puerto_https="${puerto_https:-443}" ;;
+            nginx)  read -rp "  Puerto HTTPS [443]: " puerto_https; puerto_https="${puerto_https:-443}" ;;
+            tomcat) read -rp "  Puerto HTTPS [8443]: " puerto_https; puerto_https="${puerto_https:-8443}" ;;
+        esac
 
         case "$servicio" in
-            apache) ssl_apache 80 "$puerto_https" ;;
-            nginx)  ssl_nginx  80 "$puerto_https" ;;
-            tomcat) ssl_tomcat 8080 "$puerto_https" ;;
+            apache) ssl_apache 80      "$puerto_https" ;;
+            nginx)  ssl_nginx  80      "$puerto_https" ;;
+            tomcat) ssl_tomcat 8080    "$puerto_https" ;;
         esac
     fi
+}
+
+# =============================================================================
+# VER ESTADO DE TODOS LOS SERVICIOS
+# =============================================================================
+
+ver_estado_servicios() {
+    echo ""
+    echo -e "${CYAN}══════════════════════════════════════════${NC}"
+    echo -e "${CYAN}   ESTADO DE SERVICIOS                    ${NC}"
+    echo -e "${CYAN}══════════════════════════════════════════${NC}"
+    echo ""
+
+    local servicios=("vsftpd:FTP" "httpd-custom:Apache" "nginx-custom:Nginx" "tomcat:Tomcat")
+    for entry in "${servicios[@]}"; do
+        local svc="${entry%%:*}" nombre="${entry##*:}"
+        local st; st=$(systemctl is-active "$svc" 2>/dev/null)
+        local col="${RED}"; [ "$st" = "active" ] && col="${GREEN}"
+        printf "  %-10s %-20s %b%s%b\n" "$nombre" "($svc)" "$col" "$st" "$NC"
+    done
+
+    echo ""
+    echo -e "${CYAN}  Puertos en escucha:${NC}"
+    ss -tlnp 2>/dev/null \
+        | grep -E ':21\b|:80\b|:443\b|:8080\b|:8443\b|:9[0-9]{3}\b' \
+        | awk '{print "    " $4}' | sort -u
+    echo ""
+
+    echo -e "${CYAN}  Certificado SSL:${NC}"
+    if cert_existe; then
+        local exp
+        exp=$(openssl x509 -noout -enddate -in "$CERT" 2>/dev/null | cut -d= -f2)
+        ok "  Existe: $CERT"
+        info "  Expira: $exp"
+    else
+        warn "  No generado aun"
+    fi
+    echo ""
 }
