@@ -189,14 +189,64 @@ _instalar_apache_tarball() {
     rm -rf "$extract_dir"
 
     cd "$build_dir" || return 1
+
+    # Descargar APR y APR-util dentro del srclib para compilar juntos
+    info "Descargando APR y APR-util..."
+    local apr_ver apr_util_ver
+    apr_ver=$(curl -s https://downloads.apache.org/apr/ 2>/dev/null \
+        | grep -oP 'apr-\K[0-9]+\.[0-9]+\.[0-9]+(?=\.tar\.bz2)' | sort -V | tail -1)
+    apr_util_ver=$(curl -s https://downloads.apache.org/apr/ 2>/dev/null \
+        | grep -oP 'apr-util-\K[0-9]+\.[0-9]+\.[0-9]+(?=\.tar\.bz2)' | sort -V | tail -1)
+
+    # Fallback a versiones conocidas si no se detectan
+    [ -z "$apr_ver" ]      && apr_ver="1.7.6"
+    [ -z "$apr_util_ver" ] && apr_util_ver="1.6.3"
+
+    mkdir -p "$build_dir/srclib"
+    curl -fL -o /tmp/apr.tar.bz2 \
+        "https://downloads.apache.org/apr/apr-${apr_ver}.tar.bz2" 2>/dev/null
+    curl -fL -o /tmp/apr-util.tar.bz2 \
+        "https://downloads.apache.org/apr/apr-util-${apr_util_ver}.tar.bz2" 2>/dev/null
+
+    tar -xjf /tmp/apr.tar.bz2      -C "$build_dir/srclib" 2>/dev/null
+    tar -xjf /tmp/apr-util.tar.bz2 -C "$build_dir/srclib" 2>/dev/null
+
+    # Renombrar directorios al nombre esperado por Apache
+    mv "$build_dir/srclib/apr-${apr_ver}"      "$build_dir/srclib/apr"      2>/dev/null || true
+    mv "$build_dir/srclib/apr-util-${apr_util_ver}" "$build_dir/srclib/apr-util" 2>/dev/null || true
+
     ./configure --prefix="$install_dir" \
         --enable-so --enable-ssl --enable-rewrite \
         --with-mpm=prefork \
+        --with-included-apr \
         --with-pcre=/usr/bin/pcre2-config \
         > /tmp/apache_conf.log 2>&1
 
+    if ! grep -q "config.status" /tmp/apache_conf.log 2>/dev/null && \
+       grep -q "error:" /tmp/apache_conf.log 2>/dev/null; then
+        err "Error en ./configure de Apache:"
+        grep "error:" /tmp/apache_conf.log | tail -5
+        cd / && rm -rf "$build_dir" /tmp/apr*.tar.bz2
+        return 1
+    fi
+
     make -j"$(nproc)" > /tmp/apache_make.log 2>&1
-    make install      > /tmp/apache_inst.log 2>&1
+    if [ $? -ne 0 ]; then
+        err "Error en make de Apache:"
+        tail -5 /tmp/apache_make.log
+        cd / && rm -rf "$build_dir" /tmp/apr*.tar.bz2
+        return 1
+    fi
+
+    make install > /tmp/apache_inst.log 2>&1
+    if [ $? -ne 0 ]; then
+        err "Error en make install de Apache:"
+        tail -5 /tmp/apache_inst.log
+        cd / && rm -rf "$build_dir" /tmp/apr*.tar.bz2
+        return 1
+    fi
+
+    rm -f /tmp/apr*.tar.bz2
 
     # Configuracion de seguridad basica
     cat >> "$install_dir/conf/httpd.conf" <<'EOF'
