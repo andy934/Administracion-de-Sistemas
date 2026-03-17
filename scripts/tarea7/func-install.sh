@@ -331,10 +331,28 @@ PIDFile=$install_dir/logs/nginx.pid
 WantedBy=multi-user.target
 EOF
 
+    # Corregir permisos de logs (necesario cuando se ejecuta como root)
+    chmod 755 "$install_dir/logs" 2>/dev/null || true
+
+    # Leer puerto desde variable global si esta definido, sino pedir
+    local puerto_nginx="${NGINX_HTTP_PORT:-}"
+    if [ -z "$puerto_nginx" ]; then
+        # Detectar puerto libre distinto al 80 (puede estar ocupado por Apache)
+        if ss -tlnp 2>/dev/null | grep -q ':80'; then
+            puerto_nginx=91
+            warn "Puerto 80 ocupado, usando puerto $puerto_nginx para Nginx HTTP"
+        else
+            puerto_nginx=80
+        fi
+    fi
+
+    # Configurar nginx.conf con el puerto correcto
+    sed -i "s/listen\s\+80;/listen $puerto_nginx;/g" "$install_dir/conf/nginx.conf" 2>/dev/null || true
+
     systemctl daemon-reload
     systemctl enable --now nginx-custom 2>/dev/null
     cd / && rm -rf "$build_dir"
-    ok "Nginx $version instalado en $install_dir"
+    ok "Nginx $version instalado en $install_dir (puerto HTTP: $puerto_nginx)"
 }
 
 # =============================================================================
