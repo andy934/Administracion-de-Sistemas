@@ -169,9 +169,24 @@ _instalar_apache_tarball() {
     dnf install -y gcc make pcre2-devel openssl-devel expat-devel \
         apr apr-devel apr-util apr-util-devel zlib-devel &>/dev/null
 
+    # Extraer en directorio temporal y entrar al subdirectorio
+    local extract_dir="/tmp/httpd-extract-$$"
+    mkdir -p "$extract_dir"
+    tar -xjf "$tarball" -C "$extract_dir" 2>/dev/null || \
+        tar -xzf "$tarball" -C "$extract_dir" 2>/dev/null
+
+    # El tarball extrae a un subdirectorio (ej. httpd-2.4.66/)
+    local src_dir
+    src_dir=$(find "$extract_dir" -maxdepth 1 -type d | grep -v "^$extract_dir$" | head -1)
+    if [ -z "$src_dir" ]; then
+        err "No se pudo extraer el tarball de Apache"
+        rm -rf "$extract_dir"
+        return 1
+    fi
+
     mkdir -p "$build_dir"
-    tar -xjf "$tarball" -C "$build_dir" --strip-components=1 2>/dev/null || \
-        tar -xzf "$tarball" -C "$build_dir" --strip-components=1 2>/dev/null
+    cp -a "$src_dir/." "$build_dir/"
+    rm -rf "$extract_dir"
 
     cd "$build_dir" || return 1
     ./configure --prefix="$install_dir" \
