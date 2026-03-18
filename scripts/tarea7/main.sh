@@ -118,12 +118,10 @@ instalacion_limpia() {
     # Paso 1: vsftpd
     echo ""
     info "=== PASO 1/6: vsftpd ==="
-    if ! systemctl is-active vsftpd &>/dev/null; then
-        dnf install -y vsftpd &>/dev/null
-        systemctl enable --now vsftpd
-        ok "vsftpd instalado e iniciado"
-    else
+    if systemctl is-active vsftpd &>/dev/null; then
         ok "vsftpd ya activo"
+    else
+        instalar_vsftpd
     fi
 
     # Paso 2: Repositorio FTP
