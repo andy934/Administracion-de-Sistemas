@@ -115,7 +115,7 @@ function Poblar-Repositorio {
     $errores = 0
     $wc = New-Object System.Net.WebClient
 
-    # ── Apache ────────────────────────────────────────────────────────────
+    # -- Apache ------------------------------------------------------------
     Write-Info "Detectando version de Apache para Windows..."
     try {
         $chocoOut = choco search apache-httpd --exact 2>$null
@@ -125,7 +125,7 @@ function Poblar-Repositorio {
         if (-not $apacheVer) { $apacheVer = "2.4.55" }
     } catch { $apacheVer = "2.4.55" }
 
-    # Apache en Windows se instala via Chocolatey — guardamos un marker con la version
+    # Apache en Windows se instala via Chocolatey ? guardamos un marker con la version
     $apacheMarker = "$DIR_APACHE\apache-httpd-$apacheVer-win64.choco"
     if (-not (Test-Path $apacheMarker)) {
         Set-Content -Path $apacheMarker -Value "choco:apache-httpd:$apacheVer" -Encoding ASCII
@@ -135,7 +135,7 @@ function Poblar-Repositorio {
         Write-Info "Apache: marker ya existe en repositorio"
     }
 
-    # ── Nginx ─────────────────────────────────────────────────────────────
+    # -- Nginx -------------------------------------------------------------
     Write-Info "Detectando version de Nginx para Windows..."
     try {
         $html = $wc.DownloadString('https://nginx.org/en/download.html')
@@ -318,9 +318,9 @@ function Seleccionar-Desde-FTP {
 
 function Mostrar-Estado-Repo {
     Write-Host ""
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host "   ESTADO DEL REPOSITORIO FTP (Windows)  " -ForegroundColor Cyan
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host ""
 
     foreach ($svc in @("IIS", "Apache", "Nginx")) {

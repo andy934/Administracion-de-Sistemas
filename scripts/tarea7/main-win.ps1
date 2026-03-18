@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # main-win.ps1 - Orquestador principal Practica 7 Windows
 # Infraestructura de Despliegue Seguro e Instalacion Hibrida (FTP/Web)
 # Sistema: Windows Server 2022
@@ -60,26 +60,26 @@ function Mostrar-Menu {
     $iRepo   = Get-Icono-Repo
 
     Write-Host ""
-    Write-Host "  ╔═══════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "  ║   PRACTICA 7 - DESPLIEGUE SEGURO E INSTALACION       ║" -ForegroundColor Cyan
-    Write-Host "  ║   HIBRIDA  (FTP/WEB)  +  SSL/TLS                     ║" -ForegroundColor Cyan
-    Write-Host "  ║   Sistema: Windows Server 2022                        ║" -ForegroundColor Cyan
-    Write-Host "  ╚═══════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    Write-Host "  +=======================================================+" -ForegroundColor Cyan
+    Write-Host "  |   PRACTICA 7 - DESPLIEGUE SEGURO E INSTALACION       |" -ForegroundColor Cyan
+    Write-Host "  |   HIBRIDA  (FTP/WEB)  +  SSL/TLS                     |" -ForegroundColor Cyan
+    Write-Host "  |   Sistema: Windows Server 2022                        |" -ForegroundColor Cyan
+    Write-Host "  +=======================================================+" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Estado actual:" -ForegroundColor White
     Write-Host "   ${iIIS}IIS   ${iApache}Apache   ${iNginx}Nginx"
     Write-Host "   ${iCert}Certificado SSL    ${iRepo}Repositorio FTP"
     Write-Host ""
-    Write-Host "  ── REPOSITORIO FTP ─────────────────────────────────" -ForegroundColor Cyan
+    Write-Host "  -- REPOSITORIO FTP ---------------------------------" -ForegroundColor Cyan
     Write-Host "   1. Preparar repositorio FTP  (descargar binarios + sha256)"
     Write-Host "   2. Ver estado del repositorio"
     Write-Host ""
-    Write-Host "  ── INSTALACION DE SERVIDORES ───────────────────────" -ForegroundColor Cyan
+    Write-Host "  -- INSTALACION DE SERVIDORES -----------------------" -ForegroundColor Cyan
     Write-Host "   3. Instalar / reconfigurar IIS      (WEB o FTP + SSL opcional)"
     Write-Host "   4. Instalar / reconfigurar Apache   (WEB o FTP + SSL opcional)"
     Write-Host "   5. Instalar / reconfigurar Nginx    (WEB o FTP + SSL opcional)"
     Write-Host ""
-    Write-Host "  ── SSL/TLS ──────────────────────────────────────────" -ForegroundColor Cyan
+    Write-Host "  -- SSL/TLS ------------------------------------------" -ForegroundColor Cyan
     Write-Host "   6. Generar certificado SSL  (reprobados.com)"
     Write-Host "   7. Activar SSL en IIS"
     Write-Host "   8. Activar SSL en Apache"
@@ -87,13 +87,13 @@ function Mostrar-Menu {
     Write-Host "  10. Activar FTPS en IIS-FTP"
     Write-Host "  11. Verificacion completa SSL  (resumen de 4 servicios)"
     Write-Host ""
-    Write-Host "  ── UTILIDADES ───────────────────────────────────────" -ForegroundColor Cyan
+    Write-Host "  -- UTILIDADES ---------------------------------------" -ForegroundColor Cyan
     Write-Host "  12. Ver estado de todos los servicios"
     Write-Host "  13. Configuracion SSL completa  (solo SSL, servidores ya instalados)"
     Write-Host ""
     Write-Host "   0. Salir"
     Write-Host ""
-    Write-Host "  ────────────────────────────────────────────────────" -ForegroundColor Cyan
+    Write-Host "  ----------------------------------------------------" -ForegroundColor Cyan
     Write-Host "  Nota: cada opcion valida sus dependencias automaticamente" -ForegroundColor Yellow
     Write-Host ""
 }

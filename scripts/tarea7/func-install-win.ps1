@@ -40,8 +40,8 @@ function Cargar-P6 {
 function Elegir-Fuente {
     Write-Host ""
     Write-Host "  Fuente de instalacion:" -ForegroundColor Cyan
-    Write-Host "    1. WEB — desde repositorio oficial en internet"
-    Write-Host "    2. FTP — desde repositorio privado local (IIS-FTP)"
+    Write-Host "    1. WEB ? desde repositorio oficial en internet"
+    Write-Host "    2. FTP ? desde repositorio privado local (IIS-FTP)"
     Write-Host ""
     $fuente = ""
     while ($fuente -ne "1" -and $fuente -ne "2") {
@@ -220,7 +220,7 @@ function Instalar-Nginx-Desde-Zip {
         if (Get-Process nginx -ErrorAction SilentlyContinue) {
             Write-OK "Nginx $version instalado y corriendo en puerto $($script:PuertoNginxHTTP)"
         } else {
-            Write-Warn "Nginx instalado pero no inicio — verifica manualmente"
+            Write-Warn "Nginx instalado pero no inicio ? verifica manualmente"
         }
     } else {
         Write-Err "No se encontro nginx.exe despues de extraer"
@@ -235,9 +235,9 @@ function Instalar-Servicio-Completo {
     param([string]$Servicio)
 
     Write-Host ""
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host "   INSTALACION: $($Servicio.ToUpper())" -ForegroundColor Cyan
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host ""
 
     Elegir-Fuente
@@ -289,9 +289,9 @@ function Instalar-Servicio-Completo {
 
 function Ver-Estado-Servicios {
     Write-Host ""
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host "   ESTADO DE SERVICIOS                    " -ForegroundColor Cyan
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host ""
 
     # IIS

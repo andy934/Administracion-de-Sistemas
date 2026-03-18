@@ -482,12 +482,12 @@ function Verificar-SSL {
         $cert = $ssl.RemoteCertificate
         $ssl.Close(); $tcp.Close()
 
-        Write-OK "$Servicio (${Host}:${Puerto}) — SSL OK"
+        Write-OK "$Servicio (${Host}:${Puerto}) ? SSL OK"
         Write-Host "      Subject : $($cert.Subject)"
         Write-Host "      Expira  : $($cert.GetExpirationDateString())"
         return $true
     } catch {
-        Write-Err "$Servicio (${Host}:${Puerto}) — SSL FALLO: $_"
+        Write-Err "$Servicio (${Host}:${Puerto}) ? SSL FALLO: $_"
         return $false
     }
 }
@@ -506,10 +506,10 @@ function Verificar-FTPS {
         $resp = $req.GetResponse()
         $resp.Close()
         [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $cb
-        Write-OK "IIS-FTPS (${Host}:21) — SSL OK"
+        Write-OK "IIS-FTPS (${Host}:21) ? SSL OK"
         return $true
     } catch {
-        Write-Err "IIS-FTPS (${Host}:21) — SSL FALLO o no configurado"
+        Write-Err "IIS-FTPS (${Host}:21) ? SSL FALLO o no configurado"
         return $false
     }
 }
@@ -520,9 +520,9 @@ function Verificar-FTPS {
 
 function Resumen-SSL {
     Write-Host ""
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host "   VERIFICACION AUTOMATIZADA SSL/TLS      " -ForegroundColor Cyan
-    Write-Host "══════════════════════════════════════════" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host ""
 
     $pass = 0; $fail = 0
@@ -564,8 +564,8 @@ function Resumen-SSL {
     if (Verificar-FTPS) { $pass++ } else { $fail++ }
     Write-Host ""
 
-    Write-Host "  ┌─────────────────────────────────┐"
-    Write-Host "  │  OK: $pass   |  FALLO: $fail              │"
-    Write-Host "  └─────────────────────────────────┘"
+    Write-Host "  +---------------------------------+"
+    Write-Host "  |  OK: $pass   |  FALLO: $fail              |"
+    Write-Host "  +---------------------------------+"
     Write-Host ""
 }
