@@ -1,4 +1,4 @@
-﻿# =============================================================================
+﻿?# =============================================================================
 # func-install-win.ps1 - Orquestador instalacion hibrida WEB/FTP Windows
 # Practica 7 - Administracion de Sistemas
 # Reutiliza funciones de Practica 6 (http-func.ps1)

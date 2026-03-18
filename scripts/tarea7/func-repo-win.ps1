@@ -1,4 +1,4 @@
-﻿# =============================================================================
+﻿?# =============================================================================
 # func-repo-win.ps1 - Gestion del repositorio FTP en Windows (IIS-FTP)
 # Practica 7 - Administracion de Sistemas
 # Sistema: Windows Server 2022
@@ -294,7 +294,7 @@ function Seleccionar-Desde-FTP {
     }
 
     $lista = @($archivos)
-    Write-Host "  Archivos disponibles en FTP/${Servicio}:" -ForegroundColor Cyan
+    Write-Host "  Archivos disponibles en FTP/$Servicio:" -ForegroundColor Cyan
     for ($i = 0; $i -lt $lista.Count; $i++) {
         Write-Host "    $($i+1). $($lista[$i])"
     }
