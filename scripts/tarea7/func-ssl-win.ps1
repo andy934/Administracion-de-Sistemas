@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # func-ssl-win.ps1 - Generacion de certificados SSL/TLS para Windows
 # Practica 7 - Administracion de Sistemas
 # Sistema: Windows Server 2022

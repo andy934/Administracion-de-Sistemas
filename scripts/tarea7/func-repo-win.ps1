@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # func-repo-win.ps1 - Gestion del repositorio FTP en Windows (IIS-FTP)
 # Practica 7 - Administracion de Sistemas
 # Sistema: Windows Server 2022
