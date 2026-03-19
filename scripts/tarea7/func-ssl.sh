@@ -160,6 +160,8 @@ EOF
     if echo "$test_out" | grep -q "Syntax OK"; then
         systemctl restart httpd-custom 2>/dev/null || \
             "$apache_dir/bin/apachectl" restart 2>/dev/null
+        firewall-cmd --permanent --add-port=${puerto_https}/tcp &>/dev/null
+        firewall-cmd --reload &>/dev/null
         ok "Apache SSL habilitado en puerto $puerto_https"
         ok "  Redireccion activa: $puerto_http -> $puerto_https"
         return 0
@@ -246,6 +248,8 @@ EOF
     if "$nginx_dir/sbin/nginx" -t 2>&1 | grep -q "successful"; then
         systemctl restart nginx-custom 2>/dev/null || \
             "$nginx_dir/sbin/nginx" -s reload 2>/dev/null
+        firewall-cmd --permanent --add-port=${puerto_https}/tcp &>/dev/null
+        firewall-cmd --reload &>/dev/null
         ok "Nginx SSL habilitado en puerto $puerto_https"
         ok "  Redireccion activa: $puerto_http -> $puerto_https"
         return 0
@@ -317,6 +321,9 @@ ssl_tomcat() {
         "$server_xml" 2>/dev/null
 
     systemctl restart tomcat 2>/dev/null
+    # Abrir puertos en firewall
+    firewall-cmd --permanent --add-port=${puerto_https}/tcp &>/dev/null
+    firewall-cmd --reload &>/dev/null
     ok "Tomcat SSL habilitado en puerto $puerto_https"
     return 0
 }
@@ -360,6 +367,10 @@ EOF
 
     systemctl restart vsftpd
     if systemctl is-active vsftpd &>/dev/null; then
+        # FTP ya debe estar en firewall, asegurar que este habilitado
+        firewall-cmd --permanent --add-service=ftp &>/dev/null
+        firewall-cmd --permanent --add-port=40000-40100/tcp &>/dev/null
+        firewall-cmd --reload &>/dev/null
         ok "FTPS habilitado en vsftpd"
         ok "  Canal de control: cifrado"
         ok "  Canal de datos  : cifrado"
