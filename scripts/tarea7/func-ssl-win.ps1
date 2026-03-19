@@ -1,4 +1,4 @@
-﻿# =============================================================================
+﻿?# =============================================================================
 # func-ssl-win.ps1 - SSL/TLS para Windows Server 2022
 # Practica 7 - Administracion de Sistemas
 # =============================================================================
@@ -169,6 +169,9 @@ function SSL-IIS {
 
     iisreset /restart 2>$null | Out-Null
     Start-Sleep -Seconds 3
+    # Abrir puertos en firewall de Windows
+    New-NetFirewallRule -DisplayName "HTTPS-Puerto-$PuertoHTTPS" -Direction Inbound -LocalPort $PuertoHTTPS -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+    New-NetFirewallRule -DisplayName "HTTP-Puerto-$PuertoHTTP" -Direction Inbound -LocalPort $PuertoHTTP -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
     if ((Get-Service W3SVC).Status -eq 'Running') {
         Write-OK "IIS SSL habilitado en puerto $PuertoHTTPS"
     } else {
@@ -255,6 +258,9 @@ function SSL-Apache {
     if ($test -match "Syntax OK") {
         Restart-Service Apache -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 2
+        # Abrir puertos en firewall de Windows
+        New-NetFirewallRule -DisplayName "HTTPS-Puerto-$PuertoHTTPS" -Direction Inbound -LocalPort $PuertoHTTPS -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+        New-NetFirewallRule -DisplayName "HTTP-Puerto-$PuertoHTTP" -Direction Inbound -LocalPort $PuertoHTTP -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
         Write-OK "Apache SSL habilitado en puerto $PuertoHTTPS"
         Write-OK "  Redireccion activa: $PuertoHTTP -> $PuertoHTTPS"
     } else {
@@ -331,6 +337,9 @@ function SSL-Nginx {
     Start-Sleep -Seconds 2
 
     if (Get-Process nginx -ErrorAction SilentlyContinue) {
+        # Abrir puertos en firewall de Windows
+        New-NetFirewallRule -DisplayName "HTTPS-Puerto-$PuertoHTTPS" -Direction Inbound -LocalPort $PuertoHTTPS -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+        New-NetFirewallRule -DisplayName "HTTP-Puerto-$PuertoHTTP" -Direction Inbound -LocalPort $PuertoHTTP -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
         Write-OK "Nginx SSL habilitado en puerto $PuertoHTTPS"
         Write-OK "  Redireccion activa: $PuertoHTTP -> $PuertoHTTPS"
     } else {
