@@ -36,11 +36,13 @@ function Calcular-LogonHours {
         }
     }
 
-    # Convertir bits a bytes (21 bytes)
+    # Convertir bits a bytes (21 bytes) - usar [int] para evitar division flotante
     $bytes = New-Object byte[] 21
     for ($i = 0; $i -lt 168; $i++) {
         if ($bits[$i]) {
-            $bytes[$i / 8] = $bytes[$i / 8] -bor (1 -shl ($i % 8))
+            $byteIdx = [int]([math]::Floor($i / 8))
+            $bitIdx  = $i % 8
+            $bytes[$byteIdx] = [byte]($bytes[$byteIdx] -bor (1 -shl $bitIdx))
         }
     }
     return $bytes
@@ -68,7 +70,7 @@ function Aplicar-LogonHours-Grupo {
 
     $count = 0
     foreach ($u in $usuarios) {
-        Set-ADUser -Identity $u.SamAccountName -Replace @{logonHours = $bytes}
+        Set-ADUser -Identity $u.SamAccountName -Replace @{logonHours = [byte[]]$bytes}
         $count++
     }
     Write-OK "Horario aplicado a $count usuarios del grupo $Grupo"
