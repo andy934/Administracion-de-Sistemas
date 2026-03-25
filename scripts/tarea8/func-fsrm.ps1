@@ -119,7 +119,7 @@ function Aplicar-Cuotas {
             $existing = Get-FsrmQuota -Path $userPath -ErrorAction SilentlyContinue
             if ($existing) {
                 # Actualizar cuota existente
-                Set-FsrmQuota -Path $userPath -Template $g.Plantilla
+                Set-FsrmQuota -Path $userPath -SourceTemplate $g.Plantilla
                 Write-OK "  Cuota actualizada: $($u.SamAccountName) -> $($g.MB)MB"
             } else {
                 New-FsrmQuota -Path $userPath -Template $g.Plantilla
