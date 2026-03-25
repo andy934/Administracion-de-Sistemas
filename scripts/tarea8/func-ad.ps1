@@ -7,7 +7,7 @@
 $DOMAIN        = "reprobados.com"
 $DOMAIN_NETBIOS = "REPROBADOS"
 $DOMAIN_DN     = "DC=reprobados,DC=com"
-$SAFE_PASS     = "Admin@Reprobados2026"   # Contrasena de recuperacion DSRM
+$SAFE_PASS     = "Sistemas.2026"   # Contrasena de recuperacion DSRM
 $OU_CUATES     = "OU=Cuates,$DOMAIN_DN"
 $OU_NO_CUATES  = "OU=NoCuates,$DOMAIN_DN"
 $CSV_PATH      = "$PSScriptRoot\usuarios.csv"
