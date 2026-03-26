@@ -54,41 +54,28 @@ function Crear-Plantillas-Cuota {
     if (-not (Validar-FSRM)) { return }
     Write-Info "Creando plantillas de cuota..."
 
-    $plantillas = @(
-        @{ Name = "P8-Cuota-Cuates";    Size = $QUOTA_CUATES;   Desc = "Cuota 10MB para Cuates" },
-        @{ Name = "P8-Cuota-NoCuates";  Size = $QUOTA_NOCUATES; Desc = "Cuota 5MB para NoCuates" }
-    )
-
-    foreach ($p in $plantillas) {
-        $existing = Get-FsrmQuotaTemplate -Name $p.Name -ErrorAction SilentlyContinue
-        if ($existing) {
-            Write-Info "Plantilla '$($p.Name)' ya existe"
-            continue
+    try {
+        # 1. Plantilla para Cuates (10 MB = 10485760 bytes)
+        $nameCuates = "P8-Cuota-Cuates"
+        if (-not (Get-FsrmQuotaTemplate -Name $nameCuates -ErrorAction SilentlyContinue)) {
+            # Usamos el parámetro -Size expresado en bytes directamente
+            New-FsrmQuotaTemplate -Name $nameCuates -Size 10485760
+            Write-OK "Plantilla '$nameCuates' creada (10 MB)"
+        } else {
+            Write-Info "La plantilla '$nameCuates' ya existe"
         }
 
-        # Crear accion de notificacion al 85% y al 100%
-        $threshold85 = New-FsrmQuotaThreshold -Percentage 85 -Action @(
-            New-FsrmAction -Type Email `
-                -MailTo "[Admin Email]" `
-                -Subject "Advertencia de cuota: [Quota Path]" `
-                -Body "El usuario [Source Io Owner] ha alcanzado el 85% de su cuota en [Quota Path]."
-        )
-
-        $threshold100 = New-FsrmQuotaThreshold -Percentage 100 -Action @(
-            New-FsrmAction -Type Email `
-                -MailTo "[Admin Email]" `
-                -Subject "Cuota excedida: [Quota Path]" `
-                -Body "El usuario [Source Io Owner] ha excedido su cuota en [Quota Path]."
-        )
-
-        New-FsrmQuotaTemplate `
-            -Name $p.Name `
-            -Description $p.Desc `
-            -Size $p.Size `
-            -SoftLimit $false `
-            -Threshold @($threshold85, $threshold100)
-
-        Write-OK "Plantilla '$($p.Name)' creada ($([math]::Round($p.Size/1MB)) MB)"
+        # 2. Plantilla para No Cuates (5 MB = 5242880 bytes)
+        $nameNoCuates = "P8-Cuota-NoCuates"
+        if (-not (Get-FsrmQuotaTemplate -Name $nameNoCuates -ErrorAction SilentlyContinue)) {
+            New-FsrmQuotaTemplate -Name $nameNoCuates -Size 5242880
+            Write-OK "Plantilla '$nameNoCuates' creada (5 MB)"
+        } else {
+            Write-Info "La plantilla '$nameNoCuates' ya existe"
+        }
+    }
+    catch {
+        Write-Warn "Error crítico al crear plantillas FSRM: $($_.Exception.Message)"
     }
 }
 
