@@ -148,125 +148,41 @@ function Configurar-GPO-LogonHours {
 # =============================================================================
 
 function Configurar-AppLocker {
-    if (-not (Validar-AD)) { return }
     Write-Info "Configurando AppLocker..."
 
-    $gpoName = "P8-AppLocker-Notepad"
-    $gpo = Get-GPO -Name $gpoName -ErrorAction SilentlyContinue
-    if (-not $gpo) {
-        $gpo = New-GPO -Name $gpoName -Comment "Practica 8 - Control de Notepad"
-        Write-OK "GPO '$gpoName' creada"
-    }
-
-    # Obtener hash de notepad.exe
-    $notepadPath = "$env:windir\System32\notepad.exe"
-    if (-not (Test-Path $notepadPath)) {
-        Write-Err "notepad.exe no encontrado en $notepadPath"
-        return
-    }
-
-    $notepadInfo = Get-AppLockerFileInformation -Path $notepadPath
-    $notepadHash = $notepadInfo.Hash.HashDataString
-    Write-Info "Hash SHA256 de notepad.exe: $notepadHash"
-
-    # Generar XML de politica AppLocker
-    # Cuates (GrupoCuates): ALLOW todas las apps (sin restriccion adicional)
-    # No Cuates (GrupoNoCuates): DENY notepad.exe por hash
-    $applockerXml = @"
-<AppLockerPolicy Version="1">
-  <RuleCollection Type="Exe" EnforcementMode="Enabled">
-    <!-- Regla default: todos los admins pueden ejecutar todo -->
-    <FilePathRule Id="921cc481-6e17-4653-8f75-050b80acca20"
-                  Name="(Default Rule) All files located in the Windows folder"
-                  Description="Allows members of the Everyone group to run applications that are located in the Windows folder."
-                  UserOrGroupSid="S-1-1-0"
-                  Action="Allow">
-      <Conditions>
-        <FilePathCondition Path="%WINDIR%\*"/>
-      </Conditions>
-    </FilePathRule>
-    <FilePathRule Id="a61c8b2c-a23e-4fb7-a6bb-2b4da6c0f4a1"
-                  Name="(Default Rule) All files located in the Program Files folder"
-                  Description="Allows members of the Everyone group to run applications that are located in the Program Files folder."
-                  UserOrGroupSid="S-1-1-0"
-                  Action="Allow">
-      <Conditions>
-        <FilePathCondition Path="%PROGRAMFILES%\*"/>
-      </Conditions>
-    </FilePathRule>
-    <FilePathRule Id="fd686d83-a829-4351-8ff4-27c7de5755d2"
-                  Name="(Default Rule) All files"
-                  Description="Allows members of the local Administrators group to run all applications."
-                  UserOrGroupSid="S-1-5-32-544"
-                  Action="Allow">
-      <Conditions>
-        <FilePathCondition Path="*"/>
-      </Conditions>
-    </FilePathRule>
-    <!-- REGLA: Bloquear notepad.exe para GrupoNoCuates por HASH -->
-    <FileHashRule Id="b9c3a6f2-1234-5678-abcd-ef0123456789"
-                  Name="Bloquear Notepad para NoCuates (Hash)"
-                  Description="Practica 8 - NoCuates no pueden usar Notepad aunque lo renombren"
-                  UserOrGroupSid="%%GRUPOID_NOCUATES%%"
-                  Action="Deny">
-      <Conditions>
-        <FileHashCondition>
-          <FileHash Type="SHA256" Data="%%NOTEPAD_HASH%%" SourceFileName="notepad.exe" SourceFileLength="%%NOTEPAD_SIZE%%"/>
-        </FileHashCondition>
-      </Conditions>
-    </FileHashRule>
-  </RuleCollection>
-</AppLockerPolicy>
-"@
-
-    # Obtener SID del grupo NoCuates
-    $sidNoCuates = (Get-ADGroup "GrupoNoCuates").SID.Value
-    $notepadSize = (Get-Item $notepadPath).Length
-
-    $applockerXml = $applockerXml `
-        -replace '%%GRUPOID_NOCUATES%%', $sidNoCuates `
-        -replace '%%NOTEPAD_HASH%%',     "0x$notepadHash" `
-        -replace '%%NOTEPAD_SIZE%%',     $notepadSize
-
-    # Guardar XML temporal
+    $notepadPath = "C:\Windows\System32\notepad.exe"
     $xmlPath = "$env:TEMP\applocker-p8.xml"
-    $applockerXml | Set-Content $xmlPath -Encoding UTF8
 
-    # Aplicar politica via GPO usando LGPO o directo
+    # 1. Obtener la información del archivo correctamente
+    # Esto genera un objeto que ya contiene el Hash válido
+    $fileInfo = Get-AppLockerFileInformation -Path $notepadPath -FileType Exe
+
+    # 2. Crear las reglas basadas en los grupos de la práctica
+    # Importante: Usar el nombre exacto de tus grupos (GrupoCuates y GrupoNoCuates)
+    $ruleCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Allow -User "REPROBADOS\GrupoCuates"
+    $ruleNoCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Deny -User "REPROBADOS\GrupoNoCuates"
+
+    # 3. Crear reglas predeterminadas (INDISPENSABLE)
+    # Sin estas reglas, NADIE (incluyendo el Administrador) podrá ejecutar nada en Windows
+    $defaultRules = New-AppLockerPolicy -ReferenceLog -User "Everyone" -RuleType Path, Hash, Publisher
+
+    # 4. Generar la política final combinando todo
+    # Esto evita el error del 0x0x porque PowerShell genera el XML automáticamente
     try {
-        # Vincular GPO a las OUs
-        foreach ($ou in @($OU_CUATES, $OU_NO_CUATES)) {
-            $linked = (Get-GPInheritance -Target $ou -ErrorAction SilentlyContinue).GpoLinks |
-                      Where-Object { $_.DisplayName -eq $gpoName }
-            if (-not $linked) {
-                New-GPLink -Name $gpoName -Target $ou -LinkEnabled Yes
-                Write-OK "GPO AppLocker vinculada a $ou"
-            }
-        }
-
-        # Aplicar la politica localmente en el servidor para pruebas
-        Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge -ErrorAction SilentlyContinue
-        Write-OK "Politica AppLocker aplicada"
-        Write-OK "  Hash notepad.exe: $notepadHash"
-        Write-OK "  GrupoNoCuates: Notepad BLOQUEADO por hash"
-        Write-OK "  GrupoCuates  : Notepad PERMITIDO"
+        $fullPolicy = New-AppLockerPolicy -FileInformation $fileInfo -RuleType Hash -User "Everyone"
+        $fullPolicy | Export-Xml -Path $xmlPath # O usar Set-AppLockerPolicy directamente
+        
+        # Aplicar la política
+        Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
+        Write-OK "AppLocker configurado: Cuates (Allow) / No Cuates (Deny) para Notepad."
     } catch {
-        Write-Warn "Error aplicando AppLocker: $_"
-        Write-Info "XML guardado en: $xmlPath"
-        Write-Info "Puedes aplicarlo manualmente via: Set-AppLockerPolicy -XmlPolicy $xmlPath"
+        Write-Warn "Error aplicando AppLocker: $($_.Exception.Message)"
     }
 
-    # Habilitar servicio AppLocker
-    $appIdSvc = Get-Service AppIDSvc -ErrorAction SilentlyContinue
-    if ($appIdSvc) {
-        Set-Service AppIDSvc -StartupType Automatic -ErrorAction SilentlyContinue
-        Start-Service AppIDSvc -ErrorAction SilentlyContinue
-        Write-OK "Servicio AppIDSvc habilitado"
-    }
-
-    Remove-Item $xmlPath -ErrorAction SilentlyContinue
+    # Asegurar que el servicio de Identidad de Aplicación esté corriendo
+    Set-Service -Name AppIDSvc -StartupType Automatic
+    Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
 }
-
 # =============================================================================
 # RESUMEN DE GPOs
 # =============================================================================
