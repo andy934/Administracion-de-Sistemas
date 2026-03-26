@@ -148,40 +148,48 @@ function Configurar-GPO-LogonHours {
 # =============================================================================
 
 function Configurar-AppLocker {
-    Write-Info "Configurando AppLocker..."
+    Write-Info "Configurando AppLocker (Reglas de Hash para Notepad)..."
 
-    $notepadPath = "C:\Windows\System32\notepad.exe"
     $xmlPath = "$env:TEMP\applocker-p8.xml"
+    $notepadPath = "C:\Windows\System32\notepad.exe"
 
-    # 1. Obtener la información del archivo correctamente
-    # Esto genera un objeto que ya contiene el Hash válido
-    $fileInfo = Get-AppLockerFileInformation -Path $notepadPath -FileType Exe
+    # 1. Obtener la información del archivo (Hash) de forma limpia
+    $fileInfo = Get-AppLockerFileInformation -Path $notepadPath
 
-    # 2. Crear las reglas basadas en los grupos de la práctica
-    # Importante: Usar el nombre exacto de tus grupos (GrupoCuates y GrupoNoCuates)
-    $ruleCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Allow -User "REPROBADOS\GrupoCuates"
-    $ruleNoCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Deny -User "REPROBADOS\GrupoNoCuates"
-
-    # 3. Crear reglas predeterminadas (INDISPENSABLE)
-    # Sin estas reglas, NADIE (incluyendo el Administrador) podrá ejecutar nada en Windows
-    $defaultRules = New-AppLockerPolicy -ReferenceLog -User "Everyone" -RuleType Path, Hash, Publisher
-
-    # 4. Generar la política final combinando todo
-    # Esto evita el error del 0x0x porque PowerShell genera el XML automáticamente
+    # 2. Crear la política con las reglas solicitadas
+    # Grupo 1 (Cuates) -> Permitido / Grupo 2 (No Cuates) -> Bloqueado
     try {
-        $fullPolicy = New-AppLockerPolicy -FileInformation $fileInfo -RuleType Hash -User "Everyone"
-        $fullPolicy | Export-Xml -Path $xmlPath # O usar Set-AppLockerPolicy directamente
+        # Creamos la política base con el Hash
+        $policy = New-AppLockerPolicy -FileInformation $fileInfo -RuleType Hash -User "Everyone" -Optimize
         
-        # Aplicar la política
+        # Modificamos las reglas para que sean específicas a tus grupos de AD
+        # Nota: Usamos los nombres de los grupos definidos en func-ad.ps1
+        $ruleCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Allow -User "REPROBADOS\GrupoCuates"
+        $ruleNoCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Deny -User "REPROBADOS\GrupoNoCuates"
+
+        # 3. Generar reglas predeterminadas (Evita que el sistema se bloquee)
+        # Usamos el parámetro -CreateDefaultRules que es el estándar
+        $defaultPolicy = New-AppLockerPolicy -RuleType Path -CreateDefaultRules -User "Everyone"
+
+        # 4. Fusionar y exportar
+        $defaultPolicy | Export-Clixml -Path $xmlPath
+        
+        # Aplicar la política XML al sistema
         Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
-        Write-OK "AppLocker configurado: Cuates (Allow) / No Cuates (Deny) para Notepad."
+        Write-OK "Politica de AppLocker aplicada: Notepad restringido por Hash."
     } catch {
-        Write-Warn "Error aplicando AppLocker: $($_.Exception.Message)"
+        Write-Warn "Error al procesar AppLocker: $($_.Exception.Message)"
     }
 
-    # Asegurar que el servicio de Identidad de Aplicación esté corriendo
-    Set-Service -Name AppIDSvc -StartupType Automatic
-    Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+    # 5. Forzar el inicio del servicio (AppIDSvc)
+    # Si da 'Acceso denegado', asegúrate de correr PowerShell como Administrador
+    try {
+        Set-Service -Name AppIDSvc -StartupType Automatic -ErrorAction SilentlyContinue
+        Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+        Write-OK "Servicio AppIDSvc (Identidad de Aplicacion) activo."
+    } catch {
+        Write-Warn "No se pudo configurar el inicio automático de AppIDSvc (requiere privilegios altos)."
+    }
 }
 # =============================================================================
 # RESUMEN DE GPOs
