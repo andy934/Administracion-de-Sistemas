@@ -159,14 +159,18 @@ function Configurar-AppLocker {
         return
     }
 
-    # Obtener hash SHA256 de notepad.exe
+    # Obtener hash de notepad.exe
     $hashInfo = Get-AppLockerFileInformation -Path $notepadPath
     if (-not $hashInfo -or -not $hashInfo.Hash) {
         Write-Err "No se pudo obtener informacion de hash de notepad.exe"
         return
     }
 
-    $hashData = $hashInfo.Hash.HashDataString
+    # --- CORRECCIÓN ESPECÍFICA ---
+    # Eliminamos cualquier "0x" que ya traiga el hash para que no se duplique
+    $hashData = $hashInfo.Hash.HashDataString -replace "0x", ""
+    # -----------------------------
+
     $fileSize = (Get-Item $notepadPath).Length
 
     # Obtener SID del grupo NoCuates
@@ -176,10 +180,11 @@ function Configurar-AppLocker {
         return
     }
 
-    Write-Info "  Hash SHA256 notepad.exe: $hashData"
-    Write-Info "  SID GrupoNoCuates: $sidNoCuates"
+    Write-Info "   Hash SHA256 notepad.exe: $hashData"
+    Write-Info "   SID GrupoNoCuates: $sidNoCuates"
 
     # Generar XML de politica AppLocker directamente
+    # Ahora $hashData no tiene 0x, por lo que "0x$hashData" sera correcto
     $xml = @"
 <AppLockerPolicy Version="1">
   <RuleCollection Type="Exe" EnforcementMode="Enabled">
@@ -238,7 +243,6 @@ function Configurar-AppLocker {
     Write-OK "Servicio AppIDSvc habilitado"
     Remove-Item $xmlPath -ErrorAction SilentlyContinue
 }
-
 # =============================================================================
 # RESUMEN DE GPOs
 # =============================================================================
