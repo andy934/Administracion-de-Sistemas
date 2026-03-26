@@ -139,65 +139,43 @@ function Configurar-FileScreening {
     if (-not (Validar-FSRM)) { return }
     Write-Info "Configurando File Screening (bloqueo de archivos)..."
 
-    # Crear grupo de archivos bloqueados
-    $fileGroupName = "P8-Archivos-Bloqueados"
-    $existing = Get-FsrmFileGroup -Name $fileGroupName -ErrorAction SilentlyContinue
+    try {
+        $groupName = "P8-Archivos-Bloqueados"
+        $templateName = "P8-FileScreen-Template"
 
-    if (-not $existing) {
-        New-FsrmFileGroup `
-            -Name $fileGroupName `
-            -Description "Practica 8 - Archivos multimedia y ejecutables bloqueados" `
-            -IncludePattern @("*.mp3", "*.mp4", "*.avi", "*.mkv", "*.mov", "*.wmv",
-                              "*.exe", "*.msi", "*.bat", "*.cmd", "*.com",
-                              "*.mp2", "*.wav", "*.flac", "*.aac")
-        Write-OK "Grupo de archivos '$fileGroupName' creado"
-        Write-OK "  Multimedia: *.mp3, *.mp4, *.avi, *.mkv, *.mov, *.wmv, *.mp2, *.wav, *.flac, *.aac"
-        Write-OK "  Ejecutables: *.exe, *.msi, *.bat, *.cmd, *.com"
-    } else {
-        Write-Info "Grupo '$fileGroupName' ya existe"
-    }
-
-    # Crear plantilla de file screen
-    $templateName = "P8-FileScreen-Template"
-    $existingTemplate = Get-FsrmFileScreenTemplate -Name $templateName -ErrorAction SilentlyContinue
-
-    if (-not $existingTemplate) {
-        # Accion: registrar evento y notificar
-        $action = New-FsrmAction -Type Event `
-            -EventType Warning `
-            -Body "El usuario [Source Io Owner] intento guardar un archivo no permitido: [Source File Path] en [File Screen Path]"
-
-        New-FsrmFileScreenTemplate `
-            -Name $templateName `
-            -Description "Practica 8 - Bloqueo activo de archivos prohibidos" `
-            -Active $true `
-            -IncludeGroup @($fileGroupName) `
-            -Notification @($action)
-
-        Write-OK "Plantilla '$templateName' creada (Active Screening)"
-    } else {
-        Write-Info "Plantilla '$templateName' ya existe"
-    }
-
-    # Aplicar file screen a cada carpeta de usuario
-    Write-Info "Aplicando file screen a carpetas de usuarios..."
-    $count = 0
-
-    if (Test-Path $USERS_BASE) {
-        $carpetas = Get-ChildItem $USERS_BASE -Directory
-
-        foreach ($carpeta in $carpetas) {
-            $existing = Get-FsrmFileScreen -Path $carpeta.FullName -ErrorAction SilentlyContinue
-            if ($existing) {
-                Set-FsrmFileScreen -Path $carpeta.FullName -Template $templateName
-            } else {
-                New-FsrmFileScreen -Path $carpeta.FullName -Template $templateName
-            }
-            $count++
+        # 1. Crear el grupo de archivos (Filtro de extensiones)
+        if (-not (Get-FsrmFileGroup -Name $groupName -ErrorAction SilentlyContinue)) {
+            $extensiones = @("*.mp3", "*.mp4", "*.avi", "*.mkv", "*.mov", "*.wmv", "*.exe", "*.msi", "*.bat", "*.cmd", "*.com")
+            New-FsrmFileGroup -Name $groupName -IncludePattern $extensiones
+            Write-OK "Grupo de archivos '$groupName' creado."
         }
-        Write-OK "File Screen aplicado a $count carpetas en $USERS_BASE"
-    } else {
-        Write-Warn "Directorio $USERS_BASE no existe. Crea los usuarios primero."
+
+        # 2. Crear la Plantilla de Bloqueo
+        # IMPORTANTE: Se especifica -Active explícitamente para evitar el error de posición
+        if (-not (Get-FsrmFileScreenTemplate -Name $templateName -ErrorAction SilentlyContinue)) {
+            New-FsrmFileScreenTemplate -Name $templateName `
+                -IncludeGroup $groupName `
+                -Active `
+                -Description "Bloqueo P8: Multimedia y Ejecutables"
+            Write-OK "Plantilla '$templateName' creada correctamente."
+        }
+
+        # 3. Aplicar el bloqueo a las carpetas de los usuarios
+        Write-Info "Vinculando File Screen a carpetas en $USERS_BASE..."
+        $carpetas = Get-ChildItem -Path $USERS_BASE -Directory
+        
+        foreach ($dir in $carpetas) {
+            $rutaFolder = $dir.FullName
+            # Verificamos si la carpeta ya tiene un bloqueo aplicado para evitar errores de duplicado
+            if (-not (Get-FsrmFileScreen -Path $rutaFolder -ErrorAction SilentlyContinue)) {
+                New-FsrmFileScreen -Path $rutaFolder -Template $templateName
+                Write-OK "Bloqueo aplicado a: $($dir.Name)"
+            }
+        }
+        Write-OK "Configuracion de File Screening finalizada."
+
+    } catch {
+        Write-Warn "Error critico en File Screening: $($_.Exception.Message)"
     }
 }
 
