@@ -123,11 +123,11 @@ function Unir-Al-Dominio {
 # =============================================================================
 
 # Verificar que se ejecuta como administrador
-if (-not ([Security.Principal.WindowsPrincipal]
-    [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Err "Ejecutar como Administrador"
-    exit 1
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdmin) {
+    Write-Err "Debes ejecutar este script como Administrador."
+    exit
 }
 
 Unir-Al-Dominio
