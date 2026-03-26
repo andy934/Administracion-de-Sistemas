@@ -148,48 +148,52 @@ function Configurar-GPO-LogonHours {
 # =============================================================================
 
 function Configurar-AppLocker {
+    Write-Host ""
     Write-Info "Configurando AppLocker (Reglas de Hash para Notepad)..."
 
     $xmlPath = "$env:TEMP\applocker-p8.xml"
     $notepadPath = "C:\Windows\System32\notepad.exe"
 
-    # 1. Obtener la información del archivo (Hash) de forma limpia
-    $fileInfo = Get-AppLockerFileInformation -Path $notepadPath
-
-    # 2. Crear la política con las reglas solicitadas
-    # Grupo 1 (Cuates) -> Permitido / Grupo 2 (No Cuates) -> Bloqueado
     try {
-        # Creamos la política base con el Hash
-        $policy = New-AppLockerPolicy -FileInformation $fileInfo -RuleType Hash -User "Everyone" -Optimize
-        
-        # Modificamos las reglas para que sean específicas a tus grupos de AD
-        # Nota: Usamos los nombres de los grupos definidos en func-ad.ps1
-        $ruleCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Allow -User "REPROBADOS\GrupoCuates"
-        $ruleNoCuates = New-AppLockerPolicy -FileInformation $fileInfo -Action Deny -User "REPROBADOS\GrupoNoCuates"
+        # 1. Obtener el Hash del archivo (sin RuleType para evitar conflictos)
+        $fileInfo = Get-AppLockerFileInformation -Path $notepadPath
 
-        # 3. Generar reglas predeterminadas (Evita que el sistema se bloquee)
-        # Usamos el parámetro -CreateDefaultRules que es el estándar
-        $defaultPolicy = New-AppLockerPolicy -RuleType Path -CreateDefaultRules -User "Everyone"
-
-        # 4. Fusionar y exportar
-        $defaultPolicy | Export-Clixml -Path $xmlPath
+        # 2. CREAR REGLAS DE HASH (Tarea 8)
+        # Nota: Al pasar $fileInfo, PowerShell ya sabe que es Hash. 
+        # No uses -RuleType aquí o dará error de Parameter Set.
+        $ruleCuates = New-AppLockerPolicy -FileInformation $fileInfo -User "REPROBADOS\GrupoCuates"
+        $ruleNoCuates = New-AppLockerPolicy -FileInformation $fileInfo -User "REPROBADOS\GrupoNoCuates"
         
-        # Aplicar la política XML al sistema
+        # Cambiamos la acción a Deny manualmente para el grupo No Cuates
+        $ruleNoCuates.Setting.ExecutableRules[0].Action = "Deny"
+
+        # 3. CREAR REGLAS DE SISTEMA (Para que Windows no se bloquee)
+        # Aquí SÍ usamos -RuleType Path porque no hay $fileInfo de por medio.
+        # SID S-1-1-0 es "Todos" (Universal para cualquier idioma)
+        $policy = New-AppLockerPolicy -RuleType Path -CreateDefaultRules -User "S-1-1-0"
+
+        # 4. FUSIÓN DE REGLAS
+        # Inyectamos tus reglas de Hash dentro de la política de rutas del sistema
+        if ($ruleCuates.Setting.ExecutableRules) {
+            $policy.Setting.ExecutableRules += $ruleCuates.Setting.ExecutableRules
+        }
+        if ($ruleNoCuates.Setting.ExecutableRules) {
+            $policy.Setting.ExecutableRules += $ruleNoCuates.Setting.ExecutableRules
+        }
+
+        # 5. EXPORTAR Y APLICAR
+        $policy | Export-Clixml -Path $xmlPath
         Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
-        Write-OK "Politica de AppLocker aplicada: Notepad restringido por Hash."
+        
+        Write-OK "AppLocker: Notepad (Hash) configurado y reglas de sistema aplicadas."
+
     } catch {
-        Write-Warn "Error al procesar AppLocker: $($_.Exception.Message)"
+        Write-Warn "Error en AppLocker: $($_.Exception.Message)"
     }
 
-    # 5. Forzar el inicio del servicio (AppIDSvc)
-    # Si da 'Acceso denegado', asegúrate de correr PowerShell como Administrador
-    try {
-        Set-Service -Name AppIDSvc -StartupType Automatic -ErrorAction SilentlyContinue
-        Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
-        Write-OK "Servicio AppIDSvc (Identidad de Aplicacion) activo."
-    } catch {
-        Write-Warn "No se pudo configurar el inicio automático de AppIDSvc (requiere privilegios altos)."
-    }
+    # 6. Asegurar que el servicio AppIDSvc esté corriendo
+    Set-Service -Name AppIDSvc -StartupType Automatic -ErrorAction SilentlyContinue
+    Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
 }
 # =============================================================================
 # RESUMEN DE GPOs
