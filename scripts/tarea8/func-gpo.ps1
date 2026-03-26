@@ -151,50 +151,94 @@ function Configurar-AppLocker {
     Write-Host ""
     Write-Info "Configurando AppLocker (Reglas de Hash para Notepad)..."
 
-    $xmlPath = "$env:TEMP\applocker-p8.xml"
     $notepadPath = "C:\Windows\System32\notepad.exe"
+    $xmlPath     = "$env:TEMP\applocker-p8.xml"
 
-    try {
-        # 1. Obtener el Hash del archivo (sin RuleType para evitar conflictos)
-        $fileInfo = Get-AppLockerFileInformation -Path $notepadPath
-
-        # 2. CREAR REGLAS DE HASH (Tarea 8)
-        # Nota: Al pasar $fileInfo, PowerShell ya sabe que es Hash. 
-        # No uses -RuleType aquí o dará error de Parameter Set.
-        $ruleCuates = New-AppLockerPolicy -FileInformation $fileInfo -User "REPROBADOS\GrupoCuates"
-        $ruleNoCuates = New-AppLockerPolicy -FileInformation $fileInfo -User "REPROBADOS\GrupoNoCuates"
-        
-        # Cambiamos la acción a Deny manualmente para el grupo No Cuates
-        $ruleNoCuates.Setting.ExecutableRules[0].Action = "Deny"
-
-        # 3. CREAR REGLAS DE SISTEMA (Para que Windows no se bloquee)
-        # Aquí SÍ usamos -RuleType Path porque no hay $fileInfo de por medio.
-        # SID S-1-1-0 es "Todos" (Universal para cualquier idioma)
-        $policy = New-AppLockerPolicy -RuleType Path -CreateDefaultRules -User "S-1-1-0"
-
-        # 4. FUSIÓN DE REGLAS
-        # Inyectamos tus reglas de Hash dentro de la política de rutas del sistema
-        if ($ruleCuates.Setting.ExecutableRules) {
-            $policy.Setting.ExecutableRules += $ruleCuates.Setting.ExecutableRules
-        }
-        if ($ruleNoCuates.Setting.ExecutableRules) {
-            $policy.Setting.ExecutableRules += $ruleNoCuates.Setting.ExecutableRules
-        }
-
-        # 5. EXPORTAR Y APLICAR
-        $policy | Export-Clixml -Path $xmlPath
-        Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
-        
-        Write-OK "AppLocker: Notepad (Hash) configurado y reglas de sistema aplicadas."
-
-    } catch {
-        Write-Warn "Error en AppLocker: $($_.Exception.Message)"
+    if (-not (Test-Path $notepadPath)) {
+        Write-Err "notepad.exe no encontrado en $notepadPath"
+        return
     }
 
-    # 6. Asegurar que el servicio AppIDSvc esté corriendo
+    # Obtener hash SHA256 de notepad.exe
+    $hashInfo = Get-AppLockerFileInformation -Path $notepadPath
+    if (-not $hashInfo -or -not $hashInfo.Hash) {
+        Write-Err "No se pudo obtener informacion de hash de notepad.exe"
+        return
+    }
+
+    $hashData = $hashInfo.Hash.HashDataString
+    $fileSize = (Get-Item $notepadPath).Length
+
+    # Obtener SID del grupo NoCuates
+    $sidNoCuates = (Get-ADGroup "GrupoNoCuates" -ErrorAction SilentlyContinue).SID.Value
+    if (-not $sidNoCuates) {
+        Write-Err "No se encontro el grupo GrupoNoCuates"
+        return
+    }
+
+    Write-Info "  Hash SHA256 notepad.exe: $hashData"
+    Write-Info "  SID GrupoNoCuates: $sidNoCuates"
+
+    # Generar XML de politica AppLocker directamente
+    $xml = @"
+<AppLockerPolicy Version="1">
+  <RuleCollection Type="Exe" EnforcementMode="Enabled">
+    <FilePathRule Id="921cc481-6e17-4653-8f75-050b80acca20"
+      Name="(Default) Todos en Windows"
+      Description="Permite ejecutar apps en Windows a todos"
+      UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%WINDIR%\*"/>
+      </Conditions>
+    </FilePathRule>
+    <FilePathRule Id="a61c8b2c-a23e-4fb7-a6bb-2b4da6c0f4a1"
+      Name="(Default) Todos en Program Files"
+      Description="Permite ejecutar apps en Program Files a todos"
+      UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES%\*"/>
+      </Conditions>
+    </FilePathRule>
+    <FilePathRule Id="fd686d83-a829-4351-8ff4-27c7de5755d2"
+      Name="(Default) Administradores todo"
+      Description="Permite a administradores ejecutar todo"
+      UserOrGroupSid="S-1-5-32-544" Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="*"/>
+      </Conditions>
+    </FilePathRule>
+    <FileHashRule Id="b9c3a6f2-1234-5678-abcd-ef0123456789"
+      Name="Bloquear Notepad para NoCuates por Hash"
+      Description="P8 - NoCuates no pueden usar Notepad aunque lo renombren"
+      UserOrGroupSid="$sidNoCuates" Action="Deny">
+      <Conditions>
+        <FileHashCondition>
+          <FileHash Type="SHA256" Data="0x$hashData"
+            SourceFileName="notepad.exe" SourceFileLength="$fileSize"/>
+        </FileHashCondition>
+      </Conditions>
+    </FileHashRule>
+  </RuleCollection>
+</AppLockerPolicy>
+"@
+
+    try {
+        $xml | Set-Content -Path $xmlPath -Encoding UTF8
+        Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
+        Write-OK "Politica AppLocker aplicada correctamente"
+        Write-OK "  GrupoNoCuates: Notepad BLOQUEADO por hash SHA256"
+        Write-OK "  GrupoCuates  : Notepad PERMITIDO (reglas por defecto)"
+    } catch {
+        Write-Warn "Error aplicando AppLocker: $($_.Exception.Message)"
+        Write-Info "XML guardado en: $xmlPath"
+    }
+
     Set-Service -Name AppIDSvc -StartupType Automatic -ErrorAction SilentlyContinue
     Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+    Write-OK "Servicio AppIDSvc habilitado"
+    Remove-Item $xmlPath -ErrorAction SilentlyContinue
 }
+
 # =============================================================================
 # RESUMEN DE GPOs
 # =============================================================================
