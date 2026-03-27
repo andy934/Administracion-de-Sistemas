@@ -141,7 +141,7 @@ function Promover-DomainController {
 
     Write-Host "  Parametros del nuevo bosque:" -ForegroundColor Gray
     Write-Host ""
-    Write-Fila "INF" "Dominio         :  reprobados"
+    Write-Fila "INF" "Dominio         :  reprobados.local"
     Write-Fila "INF" "NetBIOS         :  reprobados"
     Write-Fila "INF" "Nivel de bosque :  Windows Server 2022"
     Write-Fila "INF" "DNS             :  Se instala en este servidor"
@@ -177,7 +177,7 @@ function Promover-DomainController {
 
     try {
         Install-ADDSForest `
-            -DomainName "reprobados" `
+            -DomainName "reprobados.local" `
             -DomainNetbiosName "reprobados" `
             -ForestMode "WinThreshold" `
             -DomainMode "WinThreshold" `
