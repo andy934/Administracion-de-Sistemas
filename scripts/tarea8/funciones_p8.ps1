@@ -145,7 +145,7 @@ function Promover-DomainController {
     Write-Fila "INF" "NetBIOS         :  Tarea8"
     Write-Fila "INF" "Nivel de bosque :  Windows Server 2022"
     Write-Fila "INF" "DNS             :  Se instala en este servidor"
-    Write-Fila "INF" "IP del servidor :  192.168.10.11"
+    Write-Fila "INF" "IP del servidor :  192.168.137.130"
     Write-Host ""
     Write-Host "  El servidor se reiniciara automaticamente al finalizar." -ForegroundColor DarkYellow
     Write-Host ""
@@ -161,14 +161,14 @@ function Promover-DomainController {
 
     $adaptador = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
         $ip = Get-NetIPAddress -InterfaceIndex $_.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
-        if ($ip.IPAddress -eq "192.168.10.11") { $_ }
+        if ($ip.IPAddress -eq "192.168.137.130") { $_ }
     }
 
     if ($adaptador) {
-        Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses "192.168.10.11"
+        Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses "192.168.137.130"
         Write-Fila "OK" "DNS configurado  ->  $($adaptador.Name)"
     } else {
-        Write-Fila "AVS" "No se encontro adaptador con IP 192.168.10.11  (continuando)"
+        Write-Fila "AVS" "No se encontro adaptador con IP 192.168.137.130  (continuando)"
     }
 
     Write-Host ""
