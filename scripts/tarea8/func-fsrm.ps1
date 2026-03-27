@@ -118,13 +118,13 @@ function Aplicar-Cuotas {
             # Aplicar cuota
             $existing = Get-FsrmQuota -Path $userPath -ErrorAction SilentlyContinue
             if ($existing) {
-                # Actualizar cuota existente
-                Set-FsrmQuota -Path $userPath -Template $g.Plantilla
-                Write-OK "  Cuota actualizada: $($u.SamAccountName) -> $($g.MB)MB"
-            } else {
-                New-FsrmQuota -Path $userPath -Template $g.Plantilla
-                Write-OK "  Cuota aplicada: $($u.SamAccountName) -> $($g.MB)MB"
+                # 1. Si ya existe, la borramos para evitar errores de parámetros no encontrados
+                Remove-FsrmQuota -Path $userPath -Confirm:$false -ErrorAction SilentlyContinue
             }
+
+            # 2. Creamos la cuota (tanto si era nueva como si la acabamos de borrar)
+            New-FsrmQuota -Path $userPath -Template $g.Plantilla
+            Write-OK "  Cuota aplicada/actualizada: $($u.SamAccountName) -> $($g.MB)MB"
         }
         Write-Host ""
     }
