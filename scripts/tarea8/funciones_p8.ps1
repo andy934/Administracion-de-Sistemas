@@ -141,8 +141,8 @@ function Promover-DomainController {
 
     Write-Host "  Parametros del nuevo bosque:" -ForegroundColor Gray
     Write-Host ""
-    Write-Fila "INF" "Dominio         :  Active.Directory"
-    Write-Fila "INF" "NetBIOS         :  Tarea8"
+    Write-Fila "INF" "Dominio         :  reprobados"
+    Write-Fila "INF" "NetBIOS         :  reprobados"
     Write-Fila "INF" "Nivel de bosque :  Windows Server 2022"
     Write-Fila "INF" "DNS             :  Se instala en este servidor"
     Write-Fila "INF" "IP del servidor :  192.168.137.130"
@@ -177,8 +177,8 @@ function Promover-DomainController {
 
     try {
         Install-ADDSForest `
-            -DomainName "Active.Directory" `
-            -DomainNetbiosName "Tarea8" `
+            -DomainName "reprobados" `
+            -DomainNetbiosName "reprobados" `
             -ForestMode "WinThreshold" `
             -DomainMode "WinThreshold" `
             -InstallDns:$true `
@@ -483,9 +483,9 @@ function Configurar-CuotasFSRM {
     $shareExiste = Get-SmbShare -Name "Usuarios" -ErrorAction SilentlyContinue
     if (-not $shareExiste) {
         New-SmbShare -Name "Usuarios" -Path $carpetaRaiz `
-            -FullAccess "Tarea8\Domain Admins" `
-            -ChangeAccess "Tarea8\Domain Users" | Out-Null
-        Write-Fila "NEW" "Recurso compartido  ->  \\192.168.10.11\Usuarios"
+            -FullAccess "reprobados\Domain Admins" `
+            -ChangeAccess "reprobados\Domain Users" | Out-Null
+        Write-Fila "NEW" "Recurso compartido  ->  \\192.168.137.130\Usuarios"
     } else {
         Write-Fila "UPD" "Recurso compartido ya existe."
     }
@@ -493,7 +493,7 @@ function Configurar-CuotasFSRM {
     # -- Permisos NTFS --
     $acl   = Get-Acl $carpetaRaiz
     $regla = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        "Tarea8\Domain Users","Modify","ContainerInherit,ObjectInherit","None","Allow")
+        "reprobados\Domain Users","Modify","ContainerInherit,ObjectInherit","None","Allow")
     $acl.AddAccessRule($regla)
     Set-Acl $carpetaRaiz $acl
     Write-Fila "OK" "Permisos NTFS configurados para Domain Users."
@@ -531,9 +531,9 @@ function Configurar-CuotasFSRM {
         $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
 
         if ($u.Departamento -eq "Cuates") {
-            $plantillaNombre = "Tarea8-Cuates-10MB";  $tamanoBytes = 10MB; $tamanoTexto = "10 MB"
+            $plantillaNombre = "reprobados-Cuates-10MB";  $tamanoBytes = 10MB; $tamanoTexto = "10 MB"
         } elseif ($u.Departamento -eq "NoCuates") {
-            $plantillaNombre = "Tarea8-NoCuates-5MB"; $tamanoBytes = 5MB;  $tamanoTexto = " 5 MB"
+            $plantillaNombre = "reprobados-NoCuates-5MB"; $tamanoBytes = 5MB;  $tamanoTexto = " 5 MB"
         } else {
             Write-Fila "AVS" "$($u.Usuario)  :  departamento desconocido, omitido."; continue
         }
@@ -990,7 +990,7 @@ function Crear-UsuarioDinamico {
     # -- PASO 5  :  Apantallamiento --
     Write-Host "  [ 5 / 5 ]  Aplicando apantallamiento de archivos..." -ForegroundColor Gray
 
-    $plantillaScreen = "Tarea8-Apantallamiento"
+    $plantillaScreen = "reprobados-Apantallamiento"
 
     try {
         $plantillaExiste = Get-FsrmFileScreenTemplate -Name $plantillaScreen -ErrorAction SilentlyContinue
