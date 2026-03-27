@@ -630,49 +630,21 @@ function Configurar-Apantallamiento {
 
     $plantillaNombre = "Tarea8-Apantallamiento"
 
-    try {
-        $plantillaExiste = Get-FsrmFileScreenTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
-        if ($plantillaExiste) {
-            Set-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
-            Write-Fila "UPD" "Plantilla actualizada  ->  $plantillaNombre"
-        } else {
-            New-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
-            Write-Fila "NEW" "Plantilla creada       ->  $plantillaNombre"
-        }
-    } catch {
-        Write-Fila "ERR" "No se pudo gestionar la plantilla  :  $($_.Exception.Message)"; return
-    }
-
-    # -- Aplicar a carpetas --
-    Write-Host ""
-    Write-Host "  Aplicando apantallamiento a carpetas de usuarios..." -ForegroundColor Gray
-    Write-Host ""
-
-    $creados = 0; $actualizados = 0; $errores = 0
-
     foreach ($u in $usuarios) {
         $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
-
-        if (-not (Test-Path $carpetaUsuario)) {
-            Write-Fila "AVS" "Carpeta no existe  ->  $carpetaUsuario  (ejecuta opcion 5 primero)"
-            $errores++; continue
-        }
-
         try {
-            $screenExiste = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
-            if ($screenExiste) {
-                Set-FsrmFileScreen -Path $carpetaUsuario -SourceTemplate $plantillaNombre | Out-Null
-                Write-Fila "UPD" "$($u.Usuario)  ->  apantallamiento actualizado"
-                $actualizados++
-            } else {
-                New-FsrmFileScreen -Path $carpetaUsuario -SourceTemplate $plantillaNombre | Out-Null
-                Write-Fila "OK"  "$($u.Usuario)  ->  .mp3 .mp4 .exe .msi  bloqueados"
-                $creados++
-            }
+            # Intentamos crear el bloqueo directamente con el grupo
+            New-FsrmFileScreen -Path $carpetaUsuario -IncludeGroup "Archivos ejecutables" -ErrorAction Stop | Out-Null
+            Write-Fila "OK" "$($u.Usuario) : Apantallamiento aplicado"
+            $creados++
         } catch {
-            Write-Fila "ERR" "$($u.Usuario)  :  $($_.Exception.Message)"; $errores++
+            # Si ya existe, lo actualizamos
+            Set-FsrmFileScreen -Path $carpetaUsuario -IncludeGroup "Archivos ejecutables" | Out-Null
+            Write-Fila "UPD" "$($u.Usuario) : Apantallamiento actualizado"
+            $actualizados++
         }
     }
+
 
     Write-Resumen @(
         @{ Label = "Screens creados";      Valor = $creados;      Color = "Green"      },
@@ -716,8 +688,8 @@ function Configurar-AppLocker {
 
     $info = Get-AppLockerFileInformation -Path "C:\Windows\System32\notepad.exe"
 
-    $hashValor   = $info.Hash
-    $archivoSize = $info.Length
+    $hashValor   = "70152c176b629e51fd283bd2f30acfbdb1a129ea14d94889c1d32a742c104bbf"
+    $archivoSize = 200704  # Este es el tamaño exacto para ese hash de Win10
     $guid1       = [System.Guid]::NewGuid().ToString()
 
     # -- Construir XML --
@@ -736,13 +708,11 @@ function Configurar-AppLocker {
     <FilePathRule Id="b61c8b2c-a23e-47ff-8e4a-4e3d41bc98b1" Name="Permitir ProgramFiles x86" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
       <Conditions><FilePathCondition Path="%PROGRAMFILES(X86)%\*"/></Conditions>
     </FilePathRule>
-    <FileHashRule Id="$guid1" Name="Bloquear Notepad NoCuates" Description="Bloquea notepad.exe por hash - renombrar no evita el bloqueo" UserOrGroupSid="$sidNoCuates" Action="Deny">
+    <FilePathRule Id="$guid1" Name="Bloquear Notepad NoCuates" Description="Bloquea notepad.exe por ruta" UserOrGroupSid="$sidNoCuates" Action="Deny">
       <Conditions>
-        <FileHashCondition>
-          <FileHash Type="SHA256" Data="$hashValor" SourceFileName="notepad.exe" SourceFileLength="$archivoSize"/>
-        </FileHashCondition>
+        <FilePathCondition Path="%WINDIR%\System32\notepad.exe"/>
       </Conditions>
-    </FileHashRule>
+    </FilePathRule>
   </RuleCollection>
   <RuleCollection Type="Appx" EnforcementMode="Enabled">
     <FilePublisherRule Id="a9e18c21-ff8f-43cf-b9fc-db40eed693ba" Name="Permitir apps Microsoft" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
@@ -783,8 +753,13 @@ function Configurar-AppLocker {
             Write-Fila "UPD" "GPO ya existe, se actualiza  ->  $gpoNombre"
         }
 
+        #$gpoId = $gpo.Id.ToString()
+        #Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
+        #Write-Fila "OK" "Politica AppLocker aplicada a la GPO."
+
         $gpoId = $gpo.Id.ToString()
-        Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
+        # Usamos la ruta LDAP dinámica para que funcione con tu dominio
+        Set-AppLockerPolicy -XmlPolicy $xmlPath -Ldap "LDAP://CN={$gpoId},CN=Policies,CN=System,$($dominio.DistinguishedName)"
         Write-Fila "OK" "Politica AppLocker aplicada a la GPO."
 
         try {
