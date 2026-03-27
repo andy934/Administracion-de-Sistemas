@@ -480,11 +480,12 @@ function Configurar-CuotasFSRM {
 
     # -- Recurso compartido --
     Write-Host ""
+    $dominioActual = $env:USERDOMAIN
     $shareExiste = Get-SmbShare -Name "Usuarios" -ErrorAction SilentlyContinue
     if (-not $shareExiste) {
         New-SmbShare -Name "Usuarios" -Path $carpetaRaiz `
-            -FullAccess "reprobados\Domain Admins" `
-            -ChangeAccess "reprobados\Domain Users" | Out-Null
+            -FullAccess "$dominioActual\Domain Admins" `
+            -ChangeAccess "$dominioActual\Domain Users" | Out-Null
         Write-Fila "NEW" "Recurso compartido  ->  \\192.168.137.130\Usuarios"
     } else {
         Write-Fila "UPD" "Recurso compartido ya existe."
@@ -493,7 +494,7 @@ function Configurar-CuotasFSRM {
     # -- Permisos NTFS --
     $acl   = Get-Acl $carpetaRaiz
     $regla = New-Object System.Security.AccessControl.FileSystemAccessRule(
-        "reprobados\Domain Users","Modify","ContainerInherit,ObjectInherit","None","Allow")
+        "$dominioActual\Domain Users","Modify","ContainerInherit,ObjectInherit","None","Allow")
     $acl.AddAccessRule($regla)
     Set-Acl $carpetaRaiz $acl
     Write-Fila "OK" "Permisos NTFS configurados para Domain Users."
@@ -590,7 +591,7 @@ function Configurar-Apantallamiento {
 
     $usuarios    = Import-Csv -Path $csvPath
     $carpetaRaiz = "C:\Usuarios"
-    $grupoNombre = "Tarea8-ArchivosProhibidos"
+    $grupoNombre = "Archivos ejecutables"
 
     Write-Host "  Tipos de archivo que seran bloqueados en todas las carpetas:" -ForegroundColor Gray
     Write-Host ""
@@ -660,11 +661,11 @@ function Configurar-Apantallamiento {
         try {
             $screenExiste = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
             if ($screenExiste) {
-                Set-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
+                Set-FsrmFileScreen -Path $carpetaUsuario -SourceTemplate $plantillaNombre | Out-Null
                 Write-Fila "UPD" "$($u.Usuario)  ->  apantallamiento actualizado"
                 $actualizados++
             } else {
-                New-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
+                New-FsrmFileScreen -Path $carpetaUsuario -SourceTemplate $plantillaNombre | Out-Null
                 Write-Fila "OK"  "$($u.Usuario)  ->  .mp3 .mp4 .exe .msi  bloqueados"
                 $creados++
             }
