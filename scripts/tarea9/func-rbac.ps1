@@ -4,19 +4,19 @@
 # Sistema: Windows Server 2022
 # =============================================================================
 
-$DOMAIN        = "reprobados.com"
-$DOMAIN_DN     = "DC=reprobados,DC=com"
+$DOMAIN = "reprobados.com"
+$DOMAIN_DN = "DC=reprobados,DC=com"
 $DOMAIN_NETBIOS = "REPROBADOS"
-$OU_CUATES     = "OU=Cuates,$DOMAIN_DN"
-$OU_NO_CUATES  = "OU=NoCuates,$DOMAIN_DN"
-$OU_ADMINS     = "OU=AdminsDelegados,$DOMAIN_DN"
+$OU_CUATES = "OU=Cuates,$DOMAIN_DN"
+$OU_NO_CUATES = "OU=NoCuates,$DOMAIN_DN"
+$OU_ADMINS = "OU=AdminsDelegados,$DOMAIN_DN"
 
 # Usuarios delegados
 $ADMINS = @(
-    @{ Usuario = "admin_identidad"; Nombre = "Admin Identidad";  Rol = "IAM Operator";          Pass = "Admin@Identidad2026" },
-    @{ Usuario = "admin_storage";   Nombre = "Admin Storage";    Rol = "Storage Operator";       Pass = "Admin@Storage2026"   },
-    @{ Usuario = "admin_politicas"; Nombre = "Admin Politicas";  Rol = "GPO Compliance";         Pass = "Admin@Politicas2026" },
-    @{ Usuario = "admin_auditoria"; Nombre = "Admin Auditoria";  Rol = "Security Auditor";       Pass = "Admin@Auditoria2026" }
+    @{ Usuario = "admin_identidad"; Nombre = "Admin Identidad"; Rol = "IAM Operator"; Pass = "Admin@Identidad2026" },
+    @{ Usuario = "admin_storage"; Nombre = "Admin Storage"; Rol = "Storage Operator"; Pass = "Admin@Storage2026" },
+    @{ Usuario = "admin_politicas"; Nombre = "Admin Politicas"; Rol = "GPO Compliance"; Pass = "Admin@Politicas2026" },
+    @{ Usuario = "admin_auditoria"; Nombre = "Admin Auditoria"; Rol = "Security Auditor"; Pass = "Admin@Auditoria2026" }
 )
 
 # =============================================================================
@@ -27,7 +27,8 @@ function Validar-AD-P9 {
     try {
         Get-ADDomain -ErrorAction Stop | Out-Null
         return $true
-    } catch {
+    }
+    catch {
         Write-Err "Active Directory no disponible"
         Write-Err "Configura AD primero (ver Practica 8)"
         return $false
@@ -96,7 +97,7 @@ function Delegar-Identidad {
         & dsacls $ou /G "${DOMAIN_NETBIOS}\${usuario}:WP;pwdLastSet;user" /I:S | Out-Null
 
         # Modificar atributos basicos
-        foreach ($attr in @("telephoneNumber","physicalDeliveryOfficeName","mail","displayName","givenName","sn")) {
+        foreach ($attr in @("telephoneNumber", "physicalDeliveryOfficeName", "mail", "displayName", "givenName", "sn")) {
             & dsacls $ou /G "${DOMAIN_NETBIOS}\${usuario}:WP;${attr};user" /I:S | Out-Null
         }
 
@@ -130,7 +131,8 @@ function Delegar-Storage {
     try {
         Add-LocalGroupMember -Group "Administradores" -Member "$DOMAIN_NETBIOS\$usuario" -ErrorAction SilentlyContinue
         Write-OK "  admin_storage agregado a Administradores locales (para FSRM)"
-    } catch { }
+    }
+    catch { }
 
     # RESTRICCION CRITICA: Denegar Reset Password en todos los usuarios del dominio
     foreach ($ou in @($OU_CUATES, $OU_NO_CUATES, $OU_ADMINS)) {
@@ -195,7 +197,8 @@ function Delegar-Auditoria {
     # Agregar acceso remoto a logs via grupo local
     try {
         Add-LocalGroupMember -Group "Event Log Readers" -Member "$DOMAIN_NETBIOS\$usuario" -ErrorAction SilentlyContinue
-    } catch { }
+    }
+    catch { }
 
     # RESTRICCION: Denegar cualquier escritura en el dominio
     # Solo lectura - no puede modificar nada
@@ -252,9 +255,10 @@ function Verificar-RBAC {
             Write-Host "  $($a.Usuario) [$($a.Rol)]" -ForegroundColor Cyan
             Write-Host "    Habilitado: $($user.Enabled)"
             Write-Host "    UPN: $($user.UserPrincipalName)"
-            $grupos = $user.MemberOf | ForEach-Object { ($_ -split ',')[0] -replace 'CN=','' }
+            $grupos = $user.MemberOf | ForEach-Object { ($_ -split ',')[0] -replace 'CN=', '' }
             if ($grupos) { Write-Host "    Grupos: $($grupos -join ', ')" }
-        } else {
+        }
+        else {
             Write-Warn "  $($a.Usuario) - NO ENCONTRADO"
         }
         Write-Host ""

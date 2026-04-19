@@ -4,12 +4,12 @@
 # Sistema: Windows Server 2022
 # =============================================================================
 
-$MFA_DIR        = "C:\MFA"
-$WINOTP_URL     = "https://github.com/nicowillis/WinOTP/releases/latest/download/WinOTP.msi"
-$WINOTP_MSI     = "$MFA_DIR\WinOTP.msi"
-$SECRETS_FILE   = "$MFA_DIR\mfa-secrets.txt"
+$MFA_DIR = "C:\MFA"
+$WINOTP_URL = "https://github.com/nicowillis/WinOTP/releases/latest/download/WinOTP.msi"
+$WINOTP_MSI = "$MFA_DIR\WinOTP.msi"
+$SECRETS_FILE = "$MFA_DIR\mfa-secrets.txt"
 $LOCKOUT_MINUTOS = 30
-$MAX_INTENTOS    = 3
+$MAX_INTENTOS = 3
 
 # =============================================================================
 # VERIFICAR / INSTALAR PREREQUISITOS
@@ -29,7 +29,8 @@ function Verificar-Prerequisitos-MFA {
         -ErrorAction SilentlyContinue
     if ($dotnet -and $dotnet.Release -ge 461808) {
         Write-OK ".NET Framework 4.7.2+ disponible"
-    } else {
+    }
+    else {
         Write-Warn ".NET Framework puede necesitar actualizacion"
     }
 
@@ -69,7 +70,8 @@ function Instalar-WinOTP {
         $wc = New-Object System.Net.WebClient
         $wc.DownloadFile($WINOTP_URL, $WINOTP_MSI)
         Write-OK "WinOTP descargado: $WINOTP_MSI"
-    } catch {
+    }
+    catch {
         Write-Warn "No se pudo descargar WinOTP automaticamente"
         Write-Warn "Descarga manual desde: https://github.com/nicowillis/WinOTP/releases"
         Write-Warn "Guarda el MSI en: $WINOTP_MSI"
@@ -84,7 +86,8 @@ function Instalar-WinOTP {
         -Wait -PassThru
     if ($proc.ExitCode -eq 0) {
         Write-OK "WinOTP instalado correctamente"
-    } else {
+    }
+    else {
         Write-Err "Error en instalacion de WinOTP (codigo: $($proc.ExitCode))"
         Write-Info "Intentando configuracion TOTP manual..."
         Configurar-TOTP-Manual
@@ -125,8 +128,8 @@ function Configurar-TOTP-Manual {
         }
     }
 
-    $cuenta  = "Administrador"
-    $emisor  = "reprobados.com"
+    $cuenta = "Administrador"
+    $emisor = "reprobados.com"
     $totpUrl = "otpauth://totp/${emisor}:${cuenta}?secret=${secret}&issuer=${emisor}&algorithm=SHA1&digits=6&period=30"
 
     # Guardar secreto
@@ -217,12 +220,13 @@ function Configurar-MFA-Politicas {
             -Description                 "P9 - Bloqueo MFA: $MAX_INTENTOS intentos / $LOCKOUT_MINUTOS min"
 
         Write-OK "FGPP MFA creada: $MAX_INTENTOS intentos -> bloqueo $LOCKOUT_MINUTOS minutos"
-    } else {
+    }
+    else {
         Write-Info "FGPP '$fgppMFA' ya existe"
     }
 
     # Aplicar a todos los administradores delegados
-    foreach ($admin in @("admin_identidad","admin_storage","admin_politicas","admin_auditoria","Administrador")) {
+    foreach ($admin in @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria", "Administrador")) {
         Add-ADFineGrainedPasswordPolicySubject `
             -Identity $fgppMFA -Subjects $admin -ErrorAction SilentlyContinue
     }
@@ -252,7 +256,8 @@ function Verificar-Cuentas-Bloqueadas {
             Write-Host "    $($_.SamAccountName) - Bloqueada desde: $($_.PasswordLastSet)"
             Write-Host "    DN: $($_.DistinguishedName)"
         }
-    } else {
+    }
+    else {
         Write-OK "  No hay cuentas bloqueadas actualmente"
     }
     Write-Host ""
@@ -270,7 +275,8 @@ function Desbloquear-Cuenta {
     try {
         Unlock-ADAccount -Identity $Usuario
         Write-OK "Cuenta '$Usuario' desbloqueada"
-    } catch {
+    }
+    catch {
         Write-Err "Error desbloqueando '$Usuario': $_"
     }
 }
@@ -291,14 +297,16 @@ function Mostrar-Estado-MFA {
         -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "*WinOTP*" }
     if ($winotp) {
         Write-OK "WinOTP instalado: $($winotp.DisplayName) v$($winotp.DisplayVersion)"
-    } else {
+    }
+    else {
         Write-Warn "WinOTP no detectado en el sistema"
     }
 
     # Secreto TOTP
     if (Test-Path $SECRETS_FILE) {
         Write-OK "Secreto TOTP guardado en: $SECRETS_FILE"
-    } else {
+    }
+    else {
         Write-Warn "Secreto TOTP no generado aun"
     }
 
@@ -307,7 +315,8 @@ function Mostrar-Estado-MFA {
         -ErrorAction SilentlyContinue
     if ($fgpp) {
         Write-OK "FGPP Bloqueo MFA: $($fgpp.LockoutThreshold) intentos / $($fgpp.LockoutDuration) bloqueo"
-    } else {
+    }
+    else {
         Write-Warn "FGPP de bloqueo MFA no configurada"
     }
 

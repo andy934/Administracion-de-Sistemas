@@ -6,10 +6,10 @@
 
 $ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 
-function Write-OK   { param($msg) Write-Host "[OK] $msg"    -ForegroundColor Green  }
-function Write-Info { param($msg) Write-Host "[INFO] $msg"  -ForegroundColor Cyan   }
+function Write-OK { param($msg) Write-Host "[OK] $msg"    -ForegroundColor Green }
+function Write-Info { param($msg) Write-Host "[INFO] $msg"  -ForegroundColor Cyan }
 function Write-Warn { param($msg) Write-Host "[WARN] $msg"  -ForegroundColor Yellow }
-function Write-Err  { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red    }
+function Write-Err { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red }
 
 # Cargar modulos
 . "$ScriptDir\func-rbac.ps1"
@@ -28,7 +28,8 @@ function Get-Icon-Admins {
     try {
         $n = (Get-ADUser -Filter "SamAccountName -like 'admin_*'" -ErrorAction Stop).Count
         if ($n -ge 4) { return "[4 ]" } elseif ($n -gt 0) { return "[$n ]" } else { return "[--]" }
-    } catch { return "[--]" }
+    }
+    catch { return "[--]" }
 }
 
 function Get-Icon-FGPP {
@@ -46,10 +47,10 @@ function Get-Icon-MFA {
 
 function Mostrar-Menu {
     Clear-Host
-    $iAD    = Get-Icon-AD
-    $iAdm   = Get-Icon-Admins
-    $iFGPP  = Get-Icon-FGPP
-    $iMFA   = Get-Icon-MFA
+    $iAD = Get-Icon-AD
+    $iAdm = Get-Icon-Admins
+    $iFGPP = Get-Icon-FGPP
+    $iMFA = Get-Icon-MFA
 
     Write-Host ""
     Write-Host "  +=========================================================+" -ForegroundColor Cyan
@@ -132,15 +133,15 @@ while ($true) {
     Write-Host ""
 
     switch ($op) {
-        "1"  { Crear-Admins-Delegados }
-        "2"  { Configurar-RBAC-Completo }
-        "3"  { Mostrar-Estado-RBAC }
-        "4"  { Configurar-FGPP }
-        "5"  { Configurar-Auditoria }
-        "6"  { Generar-Reporte-Auditoria }
-        "7"  { Mostrar-Estado-Auditoria }
-        "8"  { Instalar-WinOTP }
-        "9"  { Configurar-MFA-Politicas }
+        "1" { Crear-Admins-Delegados }
+        "2" { Configurar-RBAC-Completo }
+        "3" { Mostrar-Estado-RBAC }
+        "4" { Configurar-FGPP }
+        "5" { Configurar-Auditoria }
+        "6" { Generar-Reporte-Auditoria }
+        "7" { Mostrar-Estado-Auditoria }
+        "8" { Instalar-WinOTP }
+        "9" { Configurar-MFA-Politicas }
         "10" { Verificar-Cuentas-Bloqueadas }
         "11" { Desbloquear-Cuenta }
         "12" { Mostrar-Estado-MFA }
@@ -150,7 +151,7 @@ while ($true) {
             if (-not $ruta) { $ruta = "C:\Auditoria\reporte.txt" }
             & "$ScriptDir\reporte-auditoria.ps1" -RutaSalida $ruta
         }
-        "0"  { Write-Host ""; Write-OK "Saliendo."; exit 0 }
+        "0" { Write-Host ""; Write-OK "Saliendo."; exit 0 }
         default { Write-Warn "Opcion invalida" }
     }
 

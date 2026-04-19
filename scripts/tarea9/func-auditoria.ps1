@@ -4,9 +4,9 @@
 # Sistema: Windows Server 2022
 # =============================================================================
 
-$DOMAIN_DN    = "DC=reprobados,DC=com"
+$DOMAIN_DN = "DC=reprobados,DC=com"
 $REPORTE_PATH = "C:\Auditoria\reporte-accesos-denegados.txt"
-$REPORTE_DIR  = "C:\Auditoria"
+$REPORTE_DIR = "C:\Auditoria"
 
 # =============================================================================
 # FINE-GRAINED PASSWORD POLICY (FGPP)
@@ -21,7 +21,8 @@ function Configurar-FGPP {
     $fgppAdmin = "PSO-AdminsDelegados"
     if (Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppAdmin'" -ErrorAction SilentlyContinue) {
         Write-Info "FGPP '$fgppAdmin' ya existe"
-    } else {
+    }
+    else {
         New-ADFineGrainedPasswordPolicy `
             -Name                        $fgppAdmin `
             -Precedence                  10 `
@@ -40,12 +41,13 @@ function Configurar-FGPP {
     }
 
     # Aplicar FGPP a los 4 administradores delegados
-    foreach ($admin in @("admin_identidad","admin_storage","admin_politicas","admin_auditoria")) {
+    foreach ($admin in @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria")) {
         try {
             Add-ADFineGrainedPasswordPolicySubject `
                 -Identity $fgppAdmin -Subjects $admin -ErrorAction SilentlyContinue
             Write-OK "  FGPP admin aplicada a: $admin"
-        } catch {
+        }
+        catch {
             Write-Warn "  $admin ya tiene FGPP o no existe"
         }
     }
@@ -56,7 +58,8 @@ function Configurar-FGPP {
     $fgppUser = "PSO-UsuariosEstandar"
     if (Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppUser'" -ErrorAction SilentlyContinue) {
         Write-Info "FGPP '$fgppUser' ya existe"
-    } else {
+    }
+    else {
         New-ADFineGrainedPasswordPolicy `
             -Name                        $fgppUser `
             -Precedence                  20 `
@@ -75,12 +78,13 @@ function Configurar-FGPP {
     }
 
     # Aplicar a grupos de usuarios estandar
-    foreach ($grupo in @("GrupoCuates","GrupoNoCuates")) {
+    foreach ($grupo in @("GrupoCuates", "GrupoNoCuates")) {
         try {
             Add-ADFineGrainedPasswordPolicySubject `
                 -Identity $fgppUser -Subjects $grupo -ErrorAction SilentlyContinue
             Write-OK "  FGPP usuario aplicada a grupo: $grupo"
-        } catch {
+        }
+        catch {
             Write-Warn "  Grupo $grupo no encontrado o ya tiene FGPP"
         }
     }
@@ -103,22 +107,23 @@ function Configurar-Auditoria {
 
     # Habilitar auditoria via auditpol
     $politicas = @(
-        @{ Sub = "Logon";                    Desc = "Inicio de sesion" },
-        @{ Sub = "Logoff";                   Desc = "Cierre de sesion" },
-        @{ Sub = "Account Lockout";          Desc = "Bloqueo de cuenta" },
-        @{ Sub = "Object Access";            Desc = "Acceso a objetos" },
-        @{ Sub = "Privilege Use";            Desc = "Uso de privilegios" },
-        @{ Sub = "Account Management";       Desc = "Gestion de cuentas" },
+        @{ Sub = "Logon"; Desc = "Inicio de sesion" },
+        @{ Sub = "Logoff"; Desc = "Cierre de sesion" },
+        @{ Sub = "Account Lockout"; Desc = "Bloqueo de cuenta" },
+        @{ Sub = "Object Access"; Desc = "Acceso a objetos" },
+        @{ Sub = "Privilege Use"; Desc = "Uso de privilegios" },
+        @{ Sub = "Account Management"; Desc = "Gestion de cuentas" },
         @{ Sub = "Directory Service Access"; Desc = "Acceso a servicios de directorio" },
-        @{ Sub = "Policy Change";            Desc = "Cambio de politicas" },
-        @{ Sub = "System";                   Desc = "Eventos del sistema" }
+        @{ Sub = "Policy Change"; Desc = "Cambio de politicas" },
+        @{ Sub = "System"; Desc = "Eventos del sistema" }
     )
 
     foreach ($pol in $politicas) {
         $result = & auditpol /set /subcategory:"$($pol.Sub)" /success:enable /failure:enable 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-OK "  Auditoria habilitada: $($pol.Desc)"
-        } else {
+        }
+        else {
             Write-Warn "  No se pudo habilitar: $($pol.Sub)"
         }
     }
@@ -135,7 +140,7 @@ function Configurar-Auditoria {
 
     # Configurar auditoria en la GPO
     $auditSettings = @(
-        @{ Key = "HKLM\SYSTEM\CurrentControlSet\Control\Lsa"; Name = "AuditBaseObjects";    Value = 1 },
+        @{ Key = "HKLM\SYSTEM\CurrentControlSet\Control\Lsa"; Name = "AuditBaseObjects"; Value = 1 },
         @{ Key = "HKLM\SYSTEM\CurrentControlSet\Control\Lsa"; Name = "FullPrivilegeAuditing"; Value = 1 }
     )
 
@@ -146,7 +151,7 @@ function Configurar-Auditoria {
 
     # Vincular GPO al dominio
     $linked = (Get-GPInheritance -Target $DOMAIN_DN -ErrorAction SilentlyContinue).GpoLinks |
-              Where-Object { $_.DisplayName -eq $gpoName }
+    Where-Object { $_.DisplayName -eq $gpoName }
     if (-not $linked) {
         New-GPLink -Name $gpoName -Target $DOMAIN_DN -LinkEnabled Yes -ErrorAction SilentlyContinue | Out-Null
         Write-OK "GPO de auditoria vinculada al dominio"
@@ -193,22 +198,22 @@ function Generar-Reporte-Auditoria {
 
     try {
         $eventos4625 = Get-WinEvent -FilterHashtable @{
-            LogName   = 'Security'
-            Id        = 4625
+            LogName = 'Security'
+            Id      = 4625
         } -MaxEvents $MaxEventos -ErrorAction SilentlyContinue
 
         if ($eventos4625) {
             foreach ($ev in $eventos4625) {
-                $xml    = [xml]$ev.ToXml()
-                $ns     = @{ e = 'http://schemas.microsoft.com/win/2004/08/events/event' }
+                $xml = [xml]$ev.ToXml()
+                $ns = @{ e = 'http://schemas.microsoft.com/win/2004/08/events/event' }
                 $getData = { param($name) ($xml.SelectNodes("//e:Data[@Name='$name']", $ns) | Select-Object -First 1).'#text' }
 
-                $usuario     = & $getData "TargetUserName"
-                $dominio     = & $getData "TargetDomainName"
-                $ip          = & $getData "IpAddress"
-                $tipoLogon   = & $getData "LogonType"
-                $razon       = & $getData "FailureReason"
-                $subStatus   = & $getData "SubStatus"
+                $usuario = & $getData "TargetUserName"
+                $dominio = & $getData "TargetDomainName"
+                $ip = & $getData "IpAddress"
+                $tipoLogon = & $getData "LogonType"
+                $razon = & $getData "FailureReason"
+                $subStatus = & $getData "SubStatus"
 
                 $lineas += "Fecha/Hora : $($ev.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss'))"
                 $lineas += "Usuario    : $dominio\$usuario"
@@ -219,12 +224,14 @@ function Generar-Reporte-Auditoria {
                 $lineas += ""
             }
             Write-OK "  $($eventos4625.Count) eventos 4625 encontrados"
-        } else {
+        }
+        else {
             $lineas += "No se encontraron eventos 4625 recientes."
             $lineas += ""
             Write-Warn "  No se encontraron eventos 4625"
         }
-    } catch {
+    }
+    catch {
         $lineas += "Error al leer eventos: $($_.Exception.Message)"
         $lineas += ""
         Write-Warn "  Error leyendo eventos de seguridad: $_"
@@ -247,11 +254,13 @@ function Generar-Reporte-Auditoria {
                 $lineas += ""
             }
             Write-OK "  $($eventos4740.Count) eventos 4740 encontrados"
-        } else {
+        }
+        else {
             $lineas += "No se encontraron cuentas bloqueadas recientemente."
             $lineas += ""
         }
-    } catch { }
+    }
+    catch { }
 
     # Evento 4648: Intento de logon con credenciales explicitas
     $lineas += "LOGON CON CREDENCIALES EXPLICITAS (Evento 4648)"
@@ -269,11 +278,13 @@ function Generar-Reporte-Auditoria {
                 $lineas += "Mensaje    : $($ev.Message.Substring(0, [Math]::Min(200, $ev.Message.Length)))"
                 $lineas += ""
             }
-        } else {
+        }
+        else {
             $lineas += "No se encontraron eventos 4648 recientes."
             $lineas += ""
         }
-    } catch { }
+    }
+    catch { }
 
     $lineas += "=" * 60
     $lineas += "FIN DEL REPORTE - $timestamp"
@@ -300,17 +311,17 @@ function Mostrar-Estado-Auditoria {
 
     # Estado auditpol
     Write-Host "  Politicas de auditoria activas:" -ForegroundColor White
-    & auditpol /get /category:"Logon/Logoff","Object Access","Account Management" 2>$null |
-        Where-Object { $_ -match "Success|Failure|No Auditing" } |
-        Select-Object -First 10 |
-        ForEach-Object { Write-Host "    $_" }
+    & auditpol /get /category:"Logon/Logoff", "Object Access", "Account Management" 2>$null |
+    Where-Object { $_ -match "Success|Failure|No Auditing" } |
+    Select-Object -First 10 |
+    ForEach-Object { Write-Host "    $_" }
 
     Write-Host ""
     Write-Host "  Fine-Grained Password Policies:" -ForegroundColor White
     Get-ADFineGrainedPasswordPolicy -Filter * -ErrorAction SilentlyContinue |
-        ForEach-Object {
-            Write-Host "    $($_.Name) | Min: $($_.MinPasswordLength) chars | Prec: $($_.Precedence)"
-        }
+    ForEach-Object {
+        Write-Host "    $($_.Name) | Min: $($_.MinPasswordLength) chars | Prec: $($_.Precedence)"
+    }
 
     Write-Host ""
     Write-Host "  Ultimo reporte de auditoria:" -ForegroundColor White
@@ -319,7 +330,8 @@ function Mostrar-Estado-Auditoria {
         Write-Host "    $REPORTE_PATH"
         Write-Host "    Modificado: $($info.LastWriteTime)"
         Write-Host "    Tamano: $($info.Length) bytes"
-    } else {
+    }
+    else {
         Write-Warn "    No se ha generado reporte aun"
     }
     Write-Host ""

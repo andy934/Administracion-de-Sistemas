@@ -6,16 +6,16 @@
 # =============================================================================
 
 param(
-    [int]$MaxEventos   = 10,
+    [int]$MaxEventos = 10,
     [string]$RutaSalida = "C:\Auditoria\reporte-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 )
 
 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-$salida    = @()
+$salida = @()
 
 function Linea { param($texto) $salida += $texto; Write-Host $texto }
-function Sep   { Linea ("-" * 65) }
-function Sep2  { Linea ("=" * 65) }
+function Sep { Linea ("-" * 65) }
+function Sep2 { Linea ("=" * 65) }
 
 Sep2
 Linea "  REPORTE DE AUDITORIA DE SEGURIDAD - PRACTICA 9"
@@ -36,7 +36,7 @@ Sep
 Linea ""
 
 try {
-    $ev4625 = Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4625 } `
+    $ev4625 = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4625 } `
         -MaxEvents $MaxEventos -ErrorAction Stop
 
     Linea "  Total encontrados: $($ev4625.Count) (mostrando maximo $MaxEventos)"
@@ -45,14 +45,14 @@ try {
     $i = 1
     foreach ($ev in $ev4625) {
         $xml = [xml]$ev.ToXml()
-        $ns  = @{ e = 'http://schemas.microsoft.com/win/2004/08/events/event' }
+        $ns = @{ e = 'http://schemas.microsoft.com/win/2004/08/events/event' }
 
-        $usuario   = ($xml.SelectNodes("//e:Data[@Name='TargetUserName']",$ns) | Select-Object -First 1).'#text'
-        $dominio   = ($xml.SelectNodes("//e:Data[@Name='TargetDomainName']",$ns) | Select-Object -First 1).'#text'
-        $ip        = ($xml.SelectNodes("//e:Data[@Name='IpAddress']",$ns) | Select-Object -First 1).'#text'
-        $logonType = ($xml.SelectNodes("//e:Data[@Name='LogonType']",$ns) | Select-Object -First 1).'#text'
-        $subStatus = ($xml.SelectNodes("//e:Data[@Name='SubStatus']",$ns) | Select-Object -First 1).'#text'
-        $proceso   = ($xml.SelectNodes("//e:Data[@Name='ProcessName']",$ns) | Select-Object -First 1).'#text'
+        $usuario = ($xml.SelectNodes("//e:Data[@Name='TargetUserName']", $ns) | Select-Object -First 1).'#text'
+        $dominio = ($xml.SelectNodes("//e:Data[@Name='TargetDomainName']", $ns) | Select-Object -First 1).'#text'
+        $ip = ($xml.SelectNodes("//e:Data[@Name='IpAddress']", $ns) | Select-Object -First 1).'#text'
+        $logonType = ($xml.SelectNodes("//e:Data[@Name='LogonType']", $ns) | Select-Object -First 1).'#text'
+        $subStatus = ($xml.SelectNodes("//e:Data[@Name='SubStatus']", $ns) | Select-Object -First 1).'#text'
+        $proceso = ($xml.SelectNodes("//e:Data[@Name='ProcessName']", $ns) | Select-Object -First 1).'#text'
 
         # Decodificar SubStatus
         $razon = switch ($subStatus) {
@@ -63,7 +63,7 @@ try {
             "0xC000006F" { "Hora de inicio de sesion no permitida" }
             "0xC0000070" { "Estacion de trabajo no permitida" }
             "0xC0000071" { "Contrasena expirada" }
-            default       { "SubStatus: $subStatus" }
+            default { "SubStatus: $subStatus" }
         }
 
         Linea "  [$i] Fecha/Hora  : $($ev.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss'))"
@@ -75,7 +75,8 @@ try {
         Linea ""
         $i++
     }
-} catch {
+}
+catch {
     Linea "  No se pudieron leer eventos 4625: $($_.Exception.Message)"
     Linea "  Verifica que el log de Seguridad este habilitado y tengas permisos."
     Linea ""
@@ -91,7 +92,7 @@ Sep
 Linea ""
 
 try {
-    $ev4740 = Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=4740 } `
+    $ev4740 = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4740 } `
         -MaxEvents 10 -ErrorAction Stop
 
     Linea "  Total encontrados: $($ev4740.Count)"
@@ -102,7 +103,8 @@ try {
         Linea "  Mensaje    : $($ev.Message.Split([Environment]::NewLine)[0])"
         Linea ""
     }
-} catch {
+}
+catch {
     Linea "  No se encontraron eventos 4740 recientes."
     Linea ""
 }
@@ -134,7 +136,8 @@ try {
         Linea "  $tipo - $($ev.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss'))"
     }
     Linea ""
-} catch {
+}
+catch {
     Linea "  No se encontraron eventos de cambio de cuentas recientes."
     Linea ""
 }
@@ -155,11 +158,13 @@ try {
         foreach ($c in $bloqueadas) {
             Linea "    - $($c.SamAccountName) | $($c.DistinguishedName)"
         }
-    } else {
+    }
+    else {
         Linea "  No hay cuentas bloqueadas en este momento."
     }
     Linea ""
-} catch {
+}
+catch {
     Linea "  Error consultando AD: $($_.Exception.Message)"
     Linea ""
 }
