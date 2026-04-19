@@ -4,7 +4,7 @@
 # Sistema: Windows Server 2022
 # =============================================================================
 
-$DOMAIN_DN = "DC=reprobados,DC=com"
+$DOMAIN_DN = "DC=reprobados,DC=local"
 $REPORTE_PATH = "C:\Auditoria\reporte-accesos-denegados.txt"
 $REPORTE_DIR = "C:\Auditoria"
 

@@ -4,8 +4,8 @@
 # Sistema: Windows Server 2022
 # =============================================================================
 
-$DOMAIN = "reprobados.com"
-$DOMAIN_DN = "DC=reprobados,DC=com"
+$DOMAIN = "reprobados.local"
+$DOMAIN_DN = "DC=reprobados,DC=local"
 $DOMAIN_NETBIOS = "REPROBADOS"
 $OU_CUATES = "OU=Cuates,$DOMAIN_DN"
 $OU_NO_CUATES = "OU=NoCuates,$DOMAIN_DN"

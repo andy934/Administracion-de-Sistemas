@@ -19,7 +19,7 @@ function Sep2 { Linea ("=" * 65) }
 
 Sep2
 Linea "  REPORTE DE AUDITORIA DE SEGURIDAD - PRACTICA 9"
-Linea "  Dominio  : reprobados.com"
+Linea "  Dominio  : reprobados.local"
 Linea "  Servidor : $env:COMPUTERNAME"
 Linea "  Generado : $timestamp"
 Linea "  Ejecutado por: $env:USERNAME"
