@@ -165,8 +165,8 @@ function Delegar-Politicas {
     Write-OK "  Permiso de vinculacion de GPOs en OUs"
 
     # Agregar al grupo Group Policy Creator Owners para crear/editar GPOs
-    Add-ADGroupMember -Identity "Group Policy Creator Owners" -Members $usuario -ErrorAction SilentlyContinue
-    Write-OK "  Agregado a Group Policy Creator Owners"
+    Add-ADGroupMember -Identity "Propietarios creadores de directivas de grupo" -Members $usuario -ErrorAction SilentlyContinue
+    Write-OK "  Agregado a Propietarios creadores de directivas de grupo (para crear/editar GPOs)"
 
     # RESTRICCION: Solo lectura en objetos de usuario (no escritura)
     foreach ($ou in @($OU_CUATES, $OU_NO_CUATES)) {
@@ -191,8 +191,8 @@ function Delegar-Auditoria {
     Write-OK "  Lectura en todo el dominio (solo lectura)"
 
     # Agregar al grupo Event Log Readers para acceder a logs de seguridad
-    Add-ADGroupMember -Identity "Event Log Readers" -Members $usuario -ErrorAction SilentlyContinue
-    Write-OK "  Agregado a Event Log Readers"
+    Add-ADGroupMember -Identity "Lectores de registros de eventos" -Members $usuario -ErrorAction SilentlyContinue
+    Write-OK "  Agregado a Lectores de registros de eventos"
 
     # Agregar acceso remoto a logs via grupo local
     try {

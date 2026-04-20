@@ -78,7 +78,7 @@ function Configurar-FGPP {
     }
 
     # Aplicar a grupos de usuarios estandar
-    foreach ($grupo in @("GrupoCuates", "GrupoNoCuates")) {
+    foreach ($grupo in @("Cuates", "NoCuates")) {
         try {
             Add-ADFineGrainedPasswordPolicySubject `
                 -Identity $fgppUser -Subjects $grupo -ErrorAction SilentlyContinue
