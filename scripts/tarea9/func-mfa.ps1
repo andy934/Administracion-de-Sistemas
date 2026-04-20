@@ -201,9 +201,8 @@ function Configurar-MFA-Politicas {
     Write-Info "Configurando politicas de bloqueo por intentos MFA fallidos..."
     Write-Host ""
 
-    # Configurar via FGPP: bloqueo tras 3 intentos por 30 minutos
-    # para los administradores delegados
     $fgppMFA = "PSO-MFA-Lockout"
+    
     if (-not (Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppMFA'" -ErrorAction SilentlyContinue)) {
         New-ADFineGrainedPasswordPolicy `
             -Name                        $fgppMFA `
@@ -212,30 +211,26 @@ function Configurar-MFA-Politicas {
             -PasswordHistoryCount        10 `
             -ComplexityEnabled           $true `
             -ReversibleEncryptionEnabled $false `
-            -MinPasswordAge              "1.00:00:00" `
-            -MaxPasswordAge              "60.00:00:00" `
-            -LockoutThreshold            $MAX_INTENTOS `
-            -LockoutDuration             "00:${LOCKOUT_MINUTOS}:00" `
-            -LockoutObservationWindow    "00:${LOCKOUT_MINUTOS}:00" `
-            -Description                 "P9 - Bloqueo MFA: $MAX_INTENTOS intentos / $LOCKOUT_MINUTOS min"
+            -LockoutThreshold            3 `
+            -LockoutDuration             "00:30:00" `
+            -LockoutObservationWindow    "00:30:00" `
+            -Description                 "P9 - Bloqueo MFA: 3 intentos / 30 min"
 
-        Write-OK "FGPP MFA creada: $MAX_INTENTOS intentos -> bloqueo $LOCKOUT_MINUTOS minutos"
+        Write-OK "FGPP MFA creada: 3 intentos -> bloqueo 30 minutos"
     }
     else {
         Write-Info "FGPP '$fgppMFA' ya existe"
     }
 
-    # Aplicar a todos los administradores delegados
-    foreach ($admin in @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria", "Administrador")) {
+    # Aplicar a todos los administradores delegados y al Administrador
+    $admins = @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria", "Administrador")
+    foreach ($admin in $admins) {
         Add-ADFineGrainedPasswordPolicySubject `
             -Identity $fgppMFA -Subjects $admin -ErrorAction SilentlyContinue
     }
+    
     Write-OK "Politica de bloqueo MFA aplicada a usuarios admin"
-
     Write-Host ""
-    Write-OK "Politicas MFA configuradas:"
-    Write-OK "  Intentos maximos: $MAX_INTENTOS"
-    Write-OK "  Duracion bloqueo: $LOCKOUT_MINUTOS minutos"
 }
 
 # =============================================================================

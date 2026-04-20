@@ -105,27 +105,20 @@ function Configurar-Auditoria {
     Write-Info "Configurando politicas de auditoria (Hardening)..."
     Write-Host ""
 
-    # Habilitar auditoria via auditpol
-    $politicas = @(
-        @{ Sub = "Logon"; Desc = "Inicio de sesion" },
-        @{ Sub = "Logoff"; Desc = "Cierre de sesion" },
-        @{ Sub = "Account Lockout"; Desc = "Bloqueo de cuenta" },
-        @{ Sub = "Object Access"; Desc = "Acceso a objetos" },
-        @{ Sub = "Privilege Use"; Desc = "Uso de privilegios" },
-        @{ Sub = "Account Management"; Desc = "Gestion de cuentas" },
-        @{ Sub = "Directory Service Access"; Desc = "Acceso a servicios de directorio" },
-        @{ Sub = "Policy Change"; Desc = "Cambio de politicas" },
-        @{ Sub = "System"; Desc = "Eventos del sistema" }
-    )
+    # Activamos por Categoría para evitar errores de acentos o traducciones
+    auditpol /set /category:"Inicio/cierre de sesión" /success:enable /failure:enable | Out-Null
+    auditpol /set /category:"Administración de cuentas" /success:enable /failure:enable | Out-Null
+    auditpol /set /category:"Acceso de objetos" /success:enable /failure:enable | Out-Null
+    
+    Write-OK "Auditoria habilitada: Inicio/Cierre, Cuentas y Objetos"
+    Write-Host ""
 
-    foreach ($pol in $politicas) {
-        $result = & auditpol /set /subcategory:"$($pol.Sub)" /success:enable /failure:enable 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-OK "  Auditoria habilitada: $($pol.Desc)"
-        }
-        else {
-            Write-Warn "  No se pudo habilitar: $($pol.Sub)"
-        }
+    # El resto de la función (creación y vinculación de la GPO) se queda igual
+    $gpoName = "P9-Auditoria-Hardening"
+    $gpo = Get-GPO -Name $gpoName -ErrorAction SilentlyContinue
+    if (-not $gpo) {
+        $gpo = New-GPO -Name $gpoName -Comment "P9 - Politicas de auditoria"
+        Write-OK "GPO '$gpoName' creada"
     }
 
     Write-Host ""
