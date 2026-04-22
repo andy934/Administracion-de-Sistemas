@@ -205,17 +205,38 @@ function Configurar-TOTP-Manual {
 
 function Configurar-MFA-Politicas {
     Write-Info "Registrando usuario Administrator en MFA..."
-    $secret = "TZZ4KWHILQC6CZE7" # Tu secreto actual
+    $secret = "TZZ4KWHILQC6CZE7"
     
-    cd $MFA_DIR
-    # Crear el usuario en el motor
-    .\multiotp.exe -create Administrator TOTP $secret 6
+    # 1. Asegurar que estamos en el directorio correcto
+    if (Test-Path $MFA_DIR) {
+        Set-Location $MFA_DIR
+    }
+    else {
+        Write-Err "Directorio MFA no encontrado."
+        return
+    }
+
+    # 2. Crear/Actualizar el usuario en el motor
+    # El comando -force asegura que si ya existe, se actualice con el nuevo secreto
+    .\multiotp.exe -create Administrator TOTP $secret 6 -force
     
-    # Establecer que el MFA sea obligatorio para este usuario
+    # 3. Activar el usuario y forzar el PIN (opcional)
     .\multiotp.exe -set Administrator users_active=1
     
-    Write-OK "Usuario Administrator vinculado a Google Authenticator."
-    Write-Info "Secreto: $secret"
+    # --- PASO CRÍTICO: INTEGRACIÓN CON WINDOWS ---
+    # Para que pida el código al entrar, el Credential Provider debe estar activo.
+    # Si instalaste el MSI, esto suele estar en el registro.
+    # Vamos a forzar la configuración del archivo de configuración global:
+    
+    if (Test-Path "multiotp.ini") {
+        Write-Info "Ajustando archivo de configuración para Login de Windows..."
+        # Aseguramos que el motor sepa que debe interactuar con el login
+        (Get-Content multiotp.ini) -replace "display_logon=0", "display_logon=1" | Set-Content multiotp.ini
+    }
+
+    Write-OK "MFA vinculado a Google Authenticator para Administrator."
+    Write-Info "Secreto para la app: $secret"
+    Write-Warn "RECUERDA: La hora del servidor debe coincidir con la de tu celular."
 }
 
 # =============================================================================
