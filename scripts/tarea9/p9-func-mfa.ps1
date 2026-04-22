@@ -8,7 +8,9 @@ function Preparar-EntornoMFA {
     Write-Host "  |   PREPARAR ENTORNO Y DESCARGAR MFA       |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    $rutaDescarga = "C:\MFA_Setup"
+    #$rutaDescarga = "C:\MFA_Setup"
+    $rutaDescarga = "$env:TEMP\MFA_Setup"
+    if (-not (Test-Path $rutaDescarga)) { New-Item $rutaDescarga -ItemType Directory }
     if (-not (Test-Path $rutaDescarga)) {
         New-Item -Path $rutaDescarga -ItemType Directory | Out-Null
         Write-Host "  [OK] Carpeta creada: $rutaDescarga" -ForegroundColor Green
