@@ -8,9 +8,7 @@ function Preparar-EntornoMFA {
     Write-Host "  |   PREPARAR ENTORNO Y DESCARGAR MFA       |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    #$rutaDescarga = "C:\MFA_Setup"
-    $rutaDescarga = "$env:TEMP\MFA_Setup"
-    if (-not (Test-Path $rutaDescarga)) { New-Item $rutaDescarga -ItemType Directory }
+    $rutaDescarga = "C:\MFA_Setup"
     if (-not (Test-Path $rutaDescarga)) {
         New-Item -Path $rutaDescarga -ItemType Directory | Out-Null
         Write-Host "  [OK] Carpeta creada: $rutaDescarga" -ForegroundColor Green
@@ -58,9 +56,7 @@ function Instalar-MFA {
     Write-Host "  |   INSTALAR DEPENDENCIAS Y MOTOR MFA      |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    #$rutaDescarga = "C:\MFA_Setup"
-    $rutaDescarga = "$env:TEMP\MFA_Setup"
-    if (-not (Test-Path $rutaDescarga)) { New-Item $rutaDescarga -ItemType Directory }
+    $rutaDescarga = "C:\MFA_Setup"
     $multiotpExe = Get-MultiOTPExe
     if ($multiotpExe) {
         Write-Host "  [OK] multiOTP ya instalado: $(Split-Path $multiotpExe)" -ForegroundColor Green
@@ -100,9 +96,25 @@ function Instalar-MFA {
     Write-Host "  4. Next hasta Finish."                             -ForegroundColor White
     Write-Host "  Presiona Enter para lanzar..."
     Read-Host | Out-Null
+    <#try {
+        if ($instalador.Extension -eq ".msi") { $p = Start-Process "msiexec.exe" -ArgumentList "/i `"$($instalador.FullName)`"" -Wait -PassThru }
+        else { $p = Start-Process $instalador.FullName -Wait -PassThru }
+        if ($p.ExitCode -eq 0) { Write-Host "  [OK] multiOTP instalado." -ForegroundColor Green }
+        else { Write-Host "  [AVISO] Codigo $($p.ExitCode)." -ForegroundColor Yellow }
+    }#>
     try {
         if ($instalador.Extension -eq ".msi") { $p = Start-Process "msiexec.exe" -ArgumentList "/i `"$($instalador.FullName)`"" -Wait -PassThru }
         else { $p = Start-Process $instalador.FullName -Wait -PassThru }
+
+        # --- MODIFICACIÓN PARA EVITAR BLOQUEOS DE GPO ---
+        if (Test-Path "C:\Program Files\multiOTP") {
+            Write-Host "  [EXTRA] Ajustando descriptores de seguridad para el Hardening..." -ForegroundColor Cyan
+            icacls "C:\Program Files\multiOTP" /grant "Administradores:(OI)(CI)F" /T /C /Q | Out-Null
+            icacls "C:\Program Files\multiOTP" /reset /T /C /Q | Out-Null
+            icacls "C:\Program Files\multiOTP" /grant "Administradores:(OI)(CI)F" /T /C /Q | Out-Null
+        }
+        # -----------------------------------------------
+
         if ($p.ExitCode -eq 0) { Write-Host "  [OK] multiOTP instalado." -ForegroundColor Green }
         else { Write-Host "  [AVISO] Codigo $($p.ExitCode)." -ForegroundColor Yellow }
     }
