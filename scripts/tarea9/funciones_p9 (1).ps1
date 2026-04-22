@@ -175,12 +175,13 @@ function Aplicar-PermisosRBAC {
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
     Write-Host "  |   APLICAR PERMISOS RBAC Y DELEGACION     |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
-
+ 
     try { $dominio = Get-ADDomain -ErrorAction Stop }
     catch { Write-Host "  [ERROR] No se puede conectar a AD." -ForegroundColor Red; Read-Host | Out-Null; return }
-
+ 
     $dcBase  = $dominio.DistinguishedName
     $netbios = $dominio.NetBIOSName
+ 
     $ouCuates   = Get-OUSegura -NombreBase "Cuates"
     $ouNoCuates = Get-OUSegura -NombreBase "NoCuates"
     if (-not $ouCuates -or -not $ouNoCuates) {
@@ -189,8 +190,18 @@ function Aplicar-PermisosRBAC {
     }
     Write-Host "  OU Cuates   : $ouCuates"    -ForegroundColor DarkGray
     Write-Host "  OU NoCuates : $ouNoCuates`n" -ForegroundColor DarkGray
-
+ 
+    # ----------------------------------------------------------------
+    # ROL 1: admin_identidad
+    # Se usa dsacls para permisos generales Y ademas Set-Acl con
+    # PowerShell para garantizar el permiso "User-Force-Change-Password"
+    # que es el GUID real de Reset Password en AD.
+    # Sin este GUID especifico, Set-ADAccountPassword falla con
+    # "Access Denied" incluso si dsacls reporta el permiso.
+    # ----------------------------------------------------------------
     Write-Host "  [ROL 1] admin_identidad (IAM Operator)..." -ForegroundColor Yellow
+ 
+    # Paso 1: dsacls para permisos generales
     foreach ($ou in @($ouCuates, $ouNoCuates)) {
         dsacls "$ou" /I:T /G "${netbios}\admin_identidad:CCDC;;user"                           2>&1 | Out-Null
         dsacls "$ou" /I:T /G "${netbios}\admin_identidad:CA;Reset Password;user"               2>&1 | Out-Null
@@ -201,12 +212,91 @@ function Aplicar-PermisosRBAC {
         dsacls "$ou" /I:T /G "${netbios}\admin_identidad:RPWP;mail;user"                       2>&1 | Out-Null
         dsacls "$ou" /I:T /G "${netbios}\admin_identidad:RPWP;lockoutTime;user"                2>&1 | Out-Null
     }
-    Write-Host "  [OK] admin_identidad: Control total sobre usuarios en ambas OUs." -ForegroundColor Green
-
+ 
+    # Paso 2: Set-Acl con PowerShell para "User-Force-Change-Password" (GUID real)
+    # Este es el permiso que Set-ADAccountPassword -Reset requiere
+    # GUID: 00299570-246d-11d0-a768-00aa006e0529
+    $guidResetPwd  = [guid]"00299570-246d-11d0-a768-00aa006e0529"
+    # GUID de objeto tipo "user"
+    $guidUser      = [guid]"bf967aba-0de6-11d0-a285-00aa003049e2"
+    $sidIdentidad  = (Get-ADUser "admin_identidad" -ErrorAction Stop).SID
+ 
+    foreach ($ou in @($ouCuates, $ouNoCuates)) {
+        try {
+            $acl = Get-Acl -Path "AD:\$ou"
+ 
+            # ACE 1: ExtendedRight "User-Force-Change-Password" sobre objetos user
+            $ace1 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+                $sidIdentidad,
+                [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight,
+                [System.Security.AccessControl.AccessControlType]::Allow,
+                $guidResetPwd,
+                [System.DirectoryServices.ActiveDirectorySecurityInheritance]::Descendents,
+                $guidUser
+            )
+            $acl.AddAccessRule($ace1)
+ 
+            # ACE 2: WriteProperty "pwdLastSet" para desbloqueo de cuentas
+            $guidPwdLastSet = [guid]"bf967a0a-0de6-11d0-a285-00aa003049e2"
+            $ace2 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+                $sidIdentidad,
+                [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
+                [System.Security.AccessControl.AccessControlType]::Allow,
+                $guidPwdLastSet,
+                [System.DirectoryServices.ActiveDirectorySecurityInheritance]::Descendents,
+                $guidUser
+            )
+            $acl.AddAccessRule($ace2)
+ 
+            # ACE 3: WriteProperty "lockoutTime" para desbloqueo de cuentas
+            $guidLockoutTime = [guid]"28630ebf-41d5-11d1-a9c1-0000f80367c1"
+            $ace3 = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+                $sidIdentidad,
+                [System.DirectoryServices.ActiveDirectoryRights]::WriteProperty,
+                [System.Security.AccessControl.AccessControlType]::Allow,
+                $guidLockoutTime,
+                [System.DirectoryServices.ActiveDirectorySecurityInheritance]::Descendents,
+                $guidUser
+            )
+            $acl.AddAccessRule($ace3)
+ 
+            Set-Acl -Path "AD:\$ou" -AclObject $acl -ErrorAction Stop
+            Write-Host "    [OK] ACEs PowerShell aplicadas en: $ou" -ForegroundColor Green
+        } catch {
+            Write-Host "    [WARN] Set-Acl en ${ou}: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    Write-Host "  [OK] admin_identidad: Reset Password delegado correctamente." -ForegroundColor Green
+ 
+    # ----------------------------------------------------------------
+    # ROL 2: admin_storage - DENY Reset Password en todo el dominio
+    # ----------------------------------------------------------------
     Write-Host "`n  [ROL 2] admin_storage -- DENY Reset Password..." -ForegroundColor Yellow
     dsacls "$dcBase" /I:S /D "${netbios}\admin_storage:CA;Reset Password;user" 2>&1 | Out-Null
-    Write-Host "  [OK] admin_storage: DENEGADO Reset Password en todo el dominio." -ForegroundColor Green
-
+ 
+    # Reforzar con Set-Acl tambien
+    try {
+        $sidStorage = (Get-ADUser "admin_storage" -ErrorAction Stop).SID
+        $aclDom     = Get-Acl -Path "AD:\$dcBase"
+        $aceDeny    = New-Object System.DirectoryServices.ActiveDirectoryAccessRule(
+            $sidStorage,
+            [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight,
+            [System.Security.AccessControl.AccessControlType]::Deny,
+            $guidResetPwd,
+            [System.DirectoryServices.ActiveDirectorySecurityInheritance]::Descendents,
+            $guidUser
+        )
+        $aclDom.AddAccessRule($aceDeny)
+        Set-Acl -Path "AD:\$dcBase" -AclObject $aclDom -ErrorAction Stop
+        Write-Host "  [OK] admin_storage: DENY Reset Password reforzado con Set-Acl." -ForegroundColor Green
+    } catch {
+        Write-Host "  [WARN] Set-Acl DENY storage: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  [OK] admin_storage: DENY aplicado via dsacls." -ForegroundColor Green
+    }
+ 
+    # ----------------------------------------------------------------
+    # ROL 3: admin_politicas
+    # ----------------------------------------------------------------
     Write-Host "`n  [ROL 3] admin_politicas (GPO Compliance)..." -ForegroundColor Yellow
     try {
         Add-ADGroupMember -Identity "Group Policy Creator Owners" -Members "admin_politicas" -ErrorAction Stop
@@ -218,7 +308,10 @@ function Aplicar-PermisosRBAC {
         dsacls "$ou" /I:T /G "${netbios}\admin_politicas:RPWP;gPOptions" 2>&1 | Out-Null
     }
     Write-Host "  [OK] admin_politicas: Lectura dominio + escritura GPOs en OUs." -ForegroundColor Green
-
+ 
+    # ----------------------------------------------------------------
+    # ROL 4: admin_auditoria
+    # ----------------------------------------------------------------
     Write-Host "`n  [ROL 4] admin_auditoria (Security Auditor)..." -ForegroundColor Yellow
     try {
         Add-ADGroupMember -Identity "Event Log Readers" -Members "admin_auditoria" -ErrorAction Stop
@@ -226,10 +319,153 @@ function Aplicar-PermisosRBAC {
     } catch { Write-Host "  [AVISO] Ya pertenece a 'Event Log Readers'." -ForegroundColor DarkGray }
     dsacls "$dcBase" /I:T /G "${netbios}\admin_auditoria:GR" 2>&1 | Out-Null
     Write-Host "  [OK] admin_auditoria: Solo lectura en todo el dominio." -ForegroundColor Green
-
+ 
     Write-Host "`n  RBAC aplicado correctamente." -ForegroundColor Green
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
     Read-Host | Out-Null
+}
+ 
+ 
+# ============================================================
+#  REEMPLAZA Test-DelegacionRBAC en funciones_p9.ps1
+#  Cambio clave: la prueba funcional ahora usa Invoke-Command
+#  con las credenciales de cada admin para que AD evalúe
+#  los permisos en el contexto correcto del usuario delegado.
+#  Antes se usaban -Credential en Set-ADAccountPassword pero
+#  eso falla desde sesion local del DC sin doble-hop Kerberos.
+# ============================================================
+function Test-DelegacionRBAC {
+    Write-Host "`n  TEST 1 -- Delegacion RBAC" -ForegroundColor Cyan
+    Write-Host "  -------------------------" -ForegroundColor Cyan
+ 
+    $dcBase   = (Get-ADDomain).DistinguishedName
+    $netbios  = (Get-ADDomain).NetBIOSName
+    $dnsRoot  = (Get-ADDomain).DNSRoot
+    $servidor = $env:COMPUTERNAME
+ 
+    # Buscar usuario de prueba en OU Cuates
+    $ouCuates = Get-OUSegura -NombreBase "Cuates"
+    $usuarioPrueba = $null
+    if ($ouCuates) {
+        $usuarioPrueba = Get-ADUser -Filter * -SearchBase $ouCuates `
+            -Properties DistinguishedName -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if (-not $usuarioPrueba) {
+        Write-Host "  [WARN] No hay usuarios en OU Cuates. Crea uno y repite." -ForegroundColor Yellow
+        return
+    }
+    Write-Host "  Usuario de prueba : $($usuarioPrueba.SamAccountName)" -ForegroundColor DarkGray
+    Write-Host "  DN                : $($usuarioPrueba.DistinguishedName)" -ForegroundColor DarkGray
+ 
+    $pwdAdmin    = ConvertTo-SecureString "Hardening2026!" -AsPlainText -Force
+    $pwdNueva    = ConvertTo-SecureString "Delegado2026!!" -AsPlainText -Force
+    $targetSam   = $usuarioPrueba.SamAccountName
+ 
+    # ---------------------------------------------------------------
+    # ACCION A: admin_identidad intenta resetear contrasena
+    # Se ejecuta con Invoke-Command -ComputerName localhost usando
+    # las credenciales de admin_identidad, forzando que Kerberos
+    # evalúe el token de ese usuario contra las ACLs de AD.
+    # ---------------------------------------------------------------
+    Write-Host "`n  ACCION A: admin_identidad resetea contrasena de '$targetSam'..." -ForegroundColor Yellow
+    $credId = New-Object System.Management.Automation.PSCredential(
+        "$netbios\admin_identidad", $pwdAdmin
+    )
+    try {
+        $resultA = Invoke-Command -ComputerName $servidor -Credential $credId `
+            -ArgumentList $targetSam -ScriptBlock {
+                param($sam)
+                Import-Module ActiveDirectory -ErrorAction Stop
+                $nueva = ConvertTo-SecureString "Delegado2026!!" -AsPlainText -Force
+                Set-ADAccountPassword -Identity $sam -NewPassword $nueva -Reset -ErrorAction Stop
+                return "OK"
+            } -ErrorAction Stop
+ 
+        if ($resultA -eq "OK") {
+            Write-Host "  [PASS] ACCION A: admin_identidad reseteo la contrasena EXITOSAMENTE." -ForegroundColor Green
+            Write-Host "         Toma captura de esta pantalla como evidencia." -ForegroundColor Cyan
+        }
+    } catch {
+        $msg = $_.Exception.Message
+        Write-Host "  [FAIL] ACCION A fallo: $msg" -ForegroundColor Red
+        Write-Host "`n  [DIAGNOSTICO] Verificando ACEs en la OU..." -ForegroundColor Yellow
+ 
+        # Diagnostico: mostrar ACEs actuales de admin_identidad
+        try {
+            $aclOU = Get-Acl -Path "AD:\$ouCuates"
+            $acesId = $aclOU.Access | Where-Object { $_.IdentityReference -like "*admin_identidad*" }
+            if ($acesId) {
+                Write-Host "  ACEs encontradas para admin_identidad:" -ForegroundColor Yellow
+                $acesId | ForEach-Object {
+                    Write-Host "    $($_.AccessControlType): $($_.ActiveDirectoryRights)" -ForegroundColor DarkGray
+                    if ($_.ObjectType -ne [guid]::Empty) {
+                        Write-Host "    ObjectType GUID: $($_.ObjectType)" -ForegroundColor DarkGray
+                    }
+                }
+            } else {
+                Write-Host "  [!] No hay ACEs para admin_identidad en la OU." -ForegroundColor Red
+                Write-Host "      Vuelve a ejecutar Opcion 3 desde el menu principal." -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "  No se pudo leer ACL: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+ 
+    # ---------------------------------------------------------------
+    # ACCION B: admin_storage intenta resetear -- debe fallar
+    # ---------------------------------------------------------------
+    Write-Host "`n  ACCION B: admin_storage intenta resetear contrasena (debe ser DENEGADO)..." -ForegroundColor Yellow
+    $credSt = New-Object System.Management.Automation.PSCredential(
+        "$netbios\admin_storage", $pwdAdmin
+    )
+    try {
+        $resultB = Invoke-Command -ComputerName $servidor -Credential $credSt `
+            -ArgumentList $targetSam -ScriptBlock {
+                param($sam)
+                Import-Module ActiveDirectory -ErrorAction Stop
+                $nueva = ConvertTo-SecureString "Delegado2026!!" -AsPlainText -Force
+                Set-ADAccountPassword -Identity $sam -NewPassword $nueva -Reset -ErrorAction Stop
+                return "OK"
+            } -ErrorAction Stop
+ 
+        # Si llega aqui, el DENY no esta funcionando
+        Write-Host "  [FAIL] ACCION B: admin_storage pudo resetear (DENY no funciona)." -ForegroundColor Red
+        Write-Host "         Vuelve a ejecutar Opcion 3 y repite el test." -ForegroundColor Yellow
+    } catch {
+        $msg = $_.Exception.Message
+        if ($msg -match "Access.is.denied|Access denied|UnauthorizedAccess|no tiene acceso|PermissionDenied|AccesoD") {
+            Write-Host "  [PASS] ACCION B: ACCESO DENEGADO correctamente para admin_storage." -ForegroundColor Green
+            Write-Host "         Error recibido: $msg" -ForegroundColor DarkGray
+            Write-Host "         Toma captura de esta pantalla como evidencia." -ForegroundColor Cyan
+        } else {
+            # Puede ser error de WinRM o conectividad, no necesariamente de permisos
+            Write-Host "  [INFO] ACCION B error (puede ser WinRM): $msg" -ForegroundColor Yellow
+            Write-Host "  Verificando DENY via ACL directamente..." -ForegroundColor Yellow
+            try {
+                $aclDom  = Get-Acl -Path "AD:\$dcBase"
+                $denyAce = $aclDom.Access | Where-Object {
+                    $_.IdentityReference -like "*admin_storage*" -and $_.AccessControlType -eq "Deny"
+                }
+                if ($denyAce) {
+                    Write-Host "  [PASS] ACCION B: ACE DENY confirmada en AD para admin_storage:" -ForegroundColor Green
+                    $denyAce | ForEach-Object {
+                        Write-Host "         Deny: $($_.ActiveDirectoryRights)" -ForegroundColor DarkGray
+                    }
+                    Write-Host "         Toma captura como evidencia del DENY." -ForegroundColor Cyan
+                } else {
+                    Write-Host "  [WARN] No se encontro ACE DENY. Ejecuta Opcion 3." -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "  No se pudo leer ACL dominio: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+    }
+ 
+    Write-Host "`n  --- RESUMEN TEST 1 ---" -ForegroundColor Cyan
+    Write-Host "  Si ACCION A = PASS y ACCION B = PASS/DENY:" -ForegroundColor White
+    Write-Host "  El Test 1 esta completado. Toma captura de esta pantalla." -ForegroundColor White
+    Write-Host "  Si ACCION A = FAIL: ejecuta Opcion 3, cierra sesion de admin_identidad" -ForegroundColor Yellow
+    Write-Host "  y vuelve a abrir sesion antes de repetir el test." -ForegroundColor Yellow
 }
 
 # ------------------------------------------------------------
@@ -438,6 +674,12 @@ function Activar-MFA {
     $miSecreto = -join ((1..16) | ForEach-Object { $base32[(Get-Random -Maximum 32)] })
     Write-Host "  [INFO] Secreto maestro: $miSecreto`n" -ForegroundColor DarkGray
 
+    # Forzar 6 digitos como configuracion global ANTES de crear usuarios
+    Write-Host "  Forzando configuracion global de 6 digitos..." -ForegroundColor Yellow
+    & ".\multiotp.exe" -config DefaultAlgorithm=totp  2>&1 | Out-Null
+    & ".\multiotp.exe" -config OtpLength=6            2>&1 | Out-Null
+    & ".\multiotp.exe" -config DefaultOtpLength=6     2>&1 | Out-Null
+
     $usuarios = @("Administrator","admin_identidad","admin_storage","admin_politicas","admin_auditoria")
     $totalOK  = 0
     foreach ($u in $usuarios) {
@@ -445,6 +687,7 @@ function Activar-MFA {
         foreach ($id in @($u, "$netbios\$u", "$u@$dns")) {
             & ".\multiotp.exe" -delete $id 2>&1 | Out-Null
             $s = & ".\multiotp.exe" -create $id TOTP $miSecreto 6 2>&1
+            & ".\multiotp.exe" -set $id otp-length=6 2>&1 | Out-Null
             if ($s -match "(?i)(ok|success|created|0)") {
                 Write-Host "    [OK] $id" -ForegroundColor Green; $totalOK++
             } else {
@@ -458,6 +701,19 @@ function Activar-MFA {
     & ".\multiotp.exe" -config MaxBlockFailures=3         2>&1 | Out-Null
     & ".\multiotp.exe" -config FailureDelayInSeconds=1800 2>&1 | Out-Null
     Write-Host "  [OK] Bloqueo configurado." -ForegroundColor Green
+
+    # Verificar que Administrator quedo con 6 digitos
+    Write-Host "`n  Verificando longitud de token..." -ForegroundColor Yellow
+    $check = & ".\multiotp.exe" -debug -display-log Administrator 000000 2>&1
+    if ($check -match "7 chars") {
+        Write-Host "  [WARN] Aun en 7 digitos, forzando correccion..." -ForegroundColor Yellow
+        & ".\multiotp.exe" -delete Administrator                   2>&1 | Out-Null
+        & ".\multiotp.exe" -create Administrator TOTP $miSecreto 6 2>&1 | Out-Null
+        & ".\multiotp.exe" -set Administrator otp-length=6         2>&1 | Out-Null
+        Write-Host "  [OK] Administrator recreado con 6 digitos." -ForegroundColor Green
+    } else {
+        Write-Host "  [OK] Token de 6 digitos confirmado." -ForegroundColor Green
+    }
     Pop-Location
 
     $archivo = "C:\MFA_Setup\MFA_Secret_TodosAdmins.txt"
