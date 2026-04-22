@@ -14,7 +14,7 @@ function Preparar-EntornoMFA {
         Write-Host "  [OK] Carpeta creada: $rutaDescarga" -ForegroundColor Green
     }
 
-    $proceder   = $true
+    $proceder = $true
     $existentes = Get-ChildItem -Path $rutaDescarga -Filter "multiOTP*" -ErrorAction SilentlyContinue
     if ($existentes) {
         Write-Host "  [AVISO] Ya hay archivos multiOTP en $rutaDescarga." -ForegroundColor Yellow
@@ -28,7 +28,7 @@ function Preparar-EntornoMFA {
         try {
             $headers = @{ "User-Agent" = "PowerShell-P09" }
             $release = Invoke-RestMethod -Uri "https://api.github.com/repos/multiOTP/multiOTPCredentialProvider/releases/latest" -Headers $headers -UseBasicParsing
-            $asset   = $release.assets | Where-Object { $_.name -like "*.zip" -or $_.name -like "*.exe" } | Select-Object -First 1
+            $asset = $release.assets | Where-Object { $_.name -like "*.zip" -or $_.name -like "*.exe" } | Select-Object -First 1
             if (-not $asset) { Write-Host "  [ERROR] Sin instalador en el release." -ForegroundColor Red; Read-Host | Out-Null; return }
             $rutaArchivo = "$rutaDescarga\$($asset.name)"
             Write-Host "  [INFO] Descargando $($release.tag_name) ($($asset.name))..." -ForegroundColor Yellow
@@ -38,7 +38,8 @@ function Preparar-EntornoMFA {
                 Expand-Archive -Path $rutaArchivo -DestinationPath $rutaDescarga -Force
             }
             Write-Host "  [OK] Descarga completa." -ForegroundColor Green
-        } catch {
+        }
+        catch {
             Write-Host "  [ERROR] Fallo la descarga: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
@@ -55,8 +56,10 @@ function Instalar-MFA {
     Write-Host "  |   INSTALAR DEPENDENCIAS Y MOTOR MFA      |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    $rutaDescarga = "C:\MFA_Setup"
-    $multiotpExe  = Get-MultiOTPExe
+    #$rutaDescarga = "C:\MFA_Setup"
+    $rutaDescarga = "$env:TEMP\MFA_Setup"
+    if (-not (Test-Path $rutaDescarga)) { New-Item $rutaDescarga -ItemType Directory }
+    $multiotpExe = Get-MultiOTPExe
     if ($multiotpExe) {
         Write-Host "  [OK] multiOTP ya instalado: $(Split-Path $multiotpExe)" -ForegroundColor Green
         $r = Read-Host "  Reconfigurar? (s/n)"
@@ -69,10 +72,11 @@ function Instalar-MFA {
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $vcPath -UseBasicParsing
-        } catch { Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red; Read-Host | Out-Null; return }
+        }
+        catch { Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red; Read-Host | Out-Null; return }
     }
     $p = Start-Process $vcPath -ArgumentList "/install /quiet /norestart" -Wait -PassThru
-    if ($p.ExitCode -in @(0,1638,3010)) { Write-Host "  [OK] VC++ listo." -ForegroundColor Green }
+    if ($p.ExitCode -in @(0, 1638, 3010)) { Write-Host "  [OK] VC++ listo." -ForegroundColor Green }
     Start-Sleep -Seconds 2
 
     Write-Host "`n  [2/2] Instalador multiOTP..." -ForegroundColor Yellow
@@ -81,8 +85,8 @@ function Instalar-MFA {
         if (-not (Test-Path $dest)) { Expand-Archive -Path $_.FullName -DestinationPath $dest -Force }
     }
     $instalador = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue |
-                  Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } |
-                  Sort-Object Length -Descending | Select-Object -First 1
+    Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } |
+    Sort-Object Length -Descending | Select-Object -First 1
     if (-not $instalador) {
         Write-Host "  [ERROR] No se encontro instalador. Ejecuta Opcion 1." -ForegroundColor Red
         Read-Host | Out-Null; return
@@ -99,7 +103,8 @@ function Instalar-MFA {
         else { $p = Start-Process $instalador.FullName -Wait -PassThru }
         if ($p.ExitCode -eq 0) { Write-Host "  [OK] multiOTP instalado." -ForegroundColor Green }
         else { Write-Host "  [AVISO] Codigo $($p.ExitCode)." -ForegroundColor Yellow }
-    } catch { Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red }
+    }
+    catch { Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red }
 
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
     Read-Host | Out-Null
@@ -123,15 +128,15 @@ function Activar-MFA {
     Push-Location $dir
 
     $netbios = $env:USERDOMAIN
-    $dns     = $env:USERDNSDOMAIN
+    $dns = $env:USERDNSDOMAIN
     if ([string]::IsNullOrWhiteSpace($dns)) { $dns = (Get-ADDomain).DNSRoot }
 
-    $base32    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    $base32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
     $miSecreto = -join ((1..16) | ForEach-Object { $base32[(Get-Random -Maximum 32)] })
     Write-Host "  [INFO] Secreto maestro: $miSecreto`n" -ForegroundColor DarkGray
 
-    $usuarios = @("Administrator","admin_identidad","admin_storage","admin_politicas","admin_auditoria")
-    $totalOK  = 0
+    $usuarios = @("Administrator", "admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria")
+    $totalOK = 0
     foreach ($u in $usuarios) {
         Write-Host "  Registrando: $u ..." -ForegroundColor Yellow
         foreach ($id in @($u, "$netbios\$u", "$u@$dns")) {
@@ -139,7 +144,8 @@ function Activar-MFA {
             $s = & ".\multiotp.exe" -create $id TOTP $miSecreto 6 2>&1
             if ($s -match "(?i)(ok|success|created|0)") {
                 Write-Host "    [OK] $id" -ForegroundColor Green; $totalOK++
-            } else {
+            }
+            else {
                 Write-Host "    [WARN] $id -> $s" -ForegroundColor Yellow
             }
         }
@@ -153,12 +159,12 @@ function Activar-MFA {
     Pop-Location
 
     $archivo = "C:\MFA_Setup\MFA_Secret_TodosAdmins.txt"
-    @("MFA TOTP Secret - Practica 09","==============================",
-      "Usuarios : Administrator, admin_identidad, admin_storage, admin_politicas, admin_auditoria",
-      "Servidor : $env:COMPUTERNAME","Dominio  : $netbios ($dns)",
-      "Secreto  : $miSecreto","Tipo     : TOTP RFC 6238 (Google Authenticator)",
-      "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')",
-      "","NOTA: Todos los usuarios comparten el mismo secreto TOTP."
+    @("MFA TOTP Secret - Practica 09", "==============================",
+        "Usuarios : Administrator, admin_identidad, admin_storage, admin_politicas, admin_auditoria",
+        "Servidor : $env:COMPUTERNAME", "Dominio  : $netbios ($dns)",
+        "Secreto  : $miSecreto", "Tipo     : TOTP RFC 6238 (Google Authenticator)",
+        "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')",
+        "", "NOTA: Todos los usuarios comparten el mismo secreto TOTP."
     ) | Out-File $archivo -Encoding UTF8
 
     Write-Host "`n  +----------------------------------------------------------+" -ForegroundColor Magenta
