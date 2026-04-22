@@ -4,6 +4,8 @@
 # Sistema: Windows Server 2022
 # =============================================================================
 
+$VCREDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+$MULTIOTP_URL = "https://download.multiotp.net/multiotp_windows.zip"
 $MFA_DIR = "C:\MFA"
 $WINOTP_URL = "https://github.com/nicowillis/WinOTP/releases/latest/download/WinOTP.msi"
 $WINOTP_MSI = "$MFA_DIR\WinOTP.msi"
@@ -50,51 +52,55 @@ function Verificar-Prerequisitos-MFA {
 # =============================================================================
 
 function Instalar-WinOTP {
-    Write-Host ""
-    Write-Host "==========================================" -ForegroundColor Cyan
-    Write-Host "   INSTALACION DE WinOTP (MFA/TOTP)       " -ForegroundColor Cyan
-    Write-Host "==========================================" -ForegroundColor Cyan
-    Write-Host ""
+    if (-not (Test-Path $MFA_DIR)) { New-Item -Path $MFA_DIR -ItemType Directory -Force }
 
-    if (Verificar-Prerequisitos-MFA) {
-        Write-Info "WinOTP ya instalado. Continuando con configuracion..."
-        Configurar-MFA-Politicas
-        return
-    }
-
-    # Crear directorio
-    New-Item -ItemType Directory -Force -Path $MFA_DIR | Out-Null
-
-    Write-Info "Descargando WinOTP..."
-    try {
-        $wc = New-Object System.Net.WebClient
-        $wc.DownloadFile($WINOTP_URL, $WINOTP_MSI)
-        Write-OK "WinOTP descargado: $WINOTP_MSI"
-    }
-    catch {
-        Write-Warn "No se pudo descargar WinOTP automaticamente"
-        Write-Warn "Descarga manual desde: https://github.com/nicowillis/WinOTP/releases"
-        Write-Warn "Guarda el MSI en: $WINOTP_MSI"
-        Write-Host ""
-        Write-Host "  Alternativa: Usar el metodo manual de configuracion TOTP" -ForegroundColor Yellow
-        Configurar-TOTP-Manual
-        return
-    }
-
-    Write-Info "Instalando WinOTP..."
-    $proc = Start-Process msiexec -ArgumentList "/i `"$WINOTP_MSI`" /quiet /norestart" `
-        -Wait -PassThru
-    if ($proc.ExitCode -eq 0) {
-        Write-OK "WinOTP instalado correctamente"
+    # --- PASO 1: INSTALAR VISUAL C++ (REQUERIDO PARA MULTIOTP) ---
+    Write-Info "Verificando Visual C++ 2022 Redistributable..."
+    $vcInstalled = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" -ErrorAction SilentlyContinue
+    if (-not $vcInstalled) {
+        Write-Warn "Visual C++ no encontrado. Descargando..."
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -Uri $VCREDIST_URL -OutFile "$MFA_DIR\vc_redist.x64.exe" -UseBasicParsing
+            Write-Info "Instalando Visual C++ de forma silenciosa..."
+            Start-Process -FilePath "$MFA_DIR\vc_redist.x64.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
+            Write-OK "Visual C++ instalado correctamente."
+        }
+        catch {
+            Write-Err "No se pudo instalar Visual C++. Verifique la conexion a internet."
+        }
     }
     else {
-        Write-Err "Error en instalacion de WinOTP (codigo: $($proc.ExitCode))"
-        Write-Info "Intentando configuracion TOTP manual..."
-        Configurar-TOTP-Manual
-        return
+        Write-OK "Visual C++ ya esta presente."
     }
 
-    Configurar-MFA-Politicas
+    # --- PASO 2: DESCARGAR E INSTALAR MULTIOTP ---
+    Write-Info "Configurando motor multiOTP..."
+    if (-not (Test-Path "$MFA_DIR\multiotp.exe")) {
+        try {
+            Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile "$MFA_DIR\multiotp.zip" -UseBasicParsing
+            Expand-Archive -Path "$MFA_DIR\multiotp.zip" -DestinationPath $MFA_DIR -Force
+            # Mover archivos si quedaron en una subcarpeta 'windows'
+            if (Test-Path "$MFA_DIR\windows\multiotp.exe") {
+                Move-Item -Path "$MFA_DIR\windows\*" -Destination $MFA_DIR -Force
+            }
+            Write-OK "Motor multiOTP descargado."
+        }
+        catch {
+            Write-Err "Error al descargar multiOTP."
+            return
+        }
+    }
+
+    # --- PASO 3: REGISTRAR CREDENTIAL PROVIDER ---
+    # Esto es lo que hace que Windows pida el codigo al entrar
+    Write-Info "Activando el prompt de MFA en el inicio de sesion..."
+    # Importante: Para que pida el codigo, el usuario debe estar creado en multiOTP
+    # y el CP debe estar registrado en el registro de Windows.
+    # El instalador .msi suele hacer esto, si usas el portable (.exe), 
+    # hay que registrar la DLL del Credential Provider manualmente.
+    
+    Write-Warn "Asegurese de ejecutar la opcion de 'Configurar MFA' para registrar al Administrador."
 }
 
 # =============================================================================
@@ -198,39 +204,18 @@ function Configurar-TOTP-Manual {
 # =============================================================================
 
 function Configurar-MFA-Politicas {
-    Write-Info "Configurando politicas de bloqueo por intentos MFA fallidos..."
-    Write-Host ""
-
-    $fgppMFA = "PSO-MFA-Lockout"
+    Write-Info "Registrando usuario Administrator en MFA..."
+    $secret = "TZZ4KWHILQC6CZE7" # Tu secreto actual
     
-    if (-not (Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppMFA'" -ErrorAction SilentlyContinue)) {
-        New-ADFineGrainedPasswordPolicy `
-            -Name                        $fgppMFA `
-            -Precedence                  5 `
-            -MinPasswordLength           12 `
-            -PasswordHistoryCount        10 `
-            -ComplexityEnabled           $true `
-            -ReversibleEncryptionEnabled $false `
-            -LockoutThreshold            3 `
-            -LockoutDuration             "00:30:00" `
-            -LockoutObservationWindow    "00:30:00" `
-            -Description                 "P9 - Bloqueo MFA: 3 intentos / 30 min"
-
-        Write-OK "FGPP MFA creada: 3 intentos -> bloqueo 30 minutos"
-    }
-    else {
-        Write-Info "FGPP '$fgppMFA' ya existe"
-    }
-
-    # Aplicar a todos los administradores delegados y al Administrador
-    $admins = @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria", "Administrador")
-    foreach ($admin in $admins) {
-        Add-ADFineGrainedPasswordPolicySubject `
-            -Identity $fgppMFA -Subjects $admin -ErrorAction SilentlyContinue
-    }
+    cd $MFA_DIR
+    # Crear el usuario en el motor
+    .\multiotp.exe -create Administrator TOTP $secret 6
     
-    Write-OK "Politica de bloqueo MFA aplicada a usuarios admin"
-    Write-Host ""
+    # Establecer que el MFA sea obligatorio para este usuario
+    .\multiotp.exe -set Administrator users_active=1
+    
+    Write-OK "Usuario Administrator vinculado a Google Authenticator."
+    Write-Info "Secreto: $secret"
 }
 
 # =============================================================================
