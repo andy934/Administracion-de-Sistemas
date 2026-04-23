@@ -48,59 +48,273 @@ function Verificar-Prerequisitos-MFA {
 }
 
 # =============================================================================
-# INSTALAR WINOTP
+# HELPER: Obtener ruta del ejecutable multiOTP instalado
 # =============================================================================
 
-function Instalar-WinOTP {
-    if (-not (Test-Path $MFA_DIR)) { New-Item -Path $MFA_DIR -ItemType Directory -Force }
+function Get-MultiOTPExe {
+    $rutas = @(
+        "C:\MFA_Setup\multiotp.exe",
+        "C:\MFA_Setup\windows\multiotp.exe",
+        "C:\Program Files\multiOTP\multiotp.exe",
+        "C:\Program Files (x86)\multiOTP\multiotp.exe",
+        "$MFA_DIR\multiotp.exe"
+    )
+    foreach ($r in $rutas) {
+        if (Test-Path $r) { return $r }
+    }
+    # Busqueda recursiva en C:\MFA_Setup si existe
+    if (Test-Path "C:\MFA_Setup") {
+        $found = Get-ChildItem -Path "C:\MFA_Setup" -Recurse -Filter "multiotp.exe" -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+        if ($found) { return $found.FullName }
+    }
+    return $null
+}
 
-    # --- PASO 1: INSTALAR VISUAL C++ (REQUERIDO PARA MULTIOTP) ---
-    Write-Info "Verificando Visual C++ 2022 Redistributable..."
-    $vcInstalled = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" -ErrorAction SilentlyContinue
-    if (-not $vcInstalled) {
-        Write-Warn "Visual C++ no encontrado. Descargando..."
+# =============================================================================
+# HELPER: Agregar regla AppLocker de ruta Allow
+# =============================================================================
+
+function Agregar-ReglaAppLockerRuta {
+    param([string]$Ruta)
+    try {
+        # Crear directorio si no existe
+        if (-not (Test-Path $Ruta)) {
+            New-Item -Path $Ruta -ItemType Directory -Force | Out-Null
+        }
+
+        # Verificar si AppLocker esta administrado via GPO
+        $appLockerGPO = Get-AppLockerPolicy -Effective -ErrorAction SilentlyContinue
+        if (-not $appLockerGPO) {
+            Write-Host "  [INFO] AppLocker no tiene politica efectiva activa." -ForegroundColor Cyan
+            return $false
+        }
+
+        # Intentar agregar regla de ruta allow para la carpeta indicada
+        $regla = New-AppLockerPolicy -RuleType Path -FileInformation $Ruta -User Everyone `
+            -RuleNamePrefix "MFA_Allow" -ErrorAction Stop
+        Set-AppLockerPolicy -PolicyObject $regla -Merge -ErrorAction Stop
+        Write-Host "  [OK] Regla AppLocker de ruta Allow agregada para: $Ruta" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Host "  [WARN] No se pudo agregar regla AppLocker: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+# =============================================================================
+# FUNCION 6: Instalar VC++ 2022 y multiOTP
+#            CORRECCION: Desactiva AppLocker antes de instalar
+# =============================================================================
+
+function Instalar-MFA {
+    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |   INSTALAR DEPENDENCIAS Y MOTOR MFA      |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+
+    $rutaDescarga = "C:\MFA_Setup"
+    $multiotpExe = Get-MultiOTPExe
+    if ($multiotpExe) {
+        Write-Host "  [OK] multiOTP ya instalado: $(Split-Path $multiotpExe)" -ForegroundColor Green
+        $r = Read-Host "  Reconfigurar? (s/n)"
+        if ($r.ToLower() -ne 's') { Write-Host "  Ve a la Opcion 7." -ForegroundColor Yellow; Read-Host | Out-Null; return }
+    }
+
+    # -------------------------------------------------------
+    # PASO CRITICO: Deshabilitar AppLocker para la instalacion
+    # Esto resuelve el error "This program is blocked by group policy"
+    # -------------------------------------------------------
+    Write-Host "  [PASO CRITICO] Manejando AppLocker para permitir instalacion..." -ForegroundColor Magenta
+
+    # Metodo 1: Agregar regla de ruta allow para C:\MFA_Setup y C:\Windows
+    $reglaAgregada = Agregar-ReglaAppLockerRuta -Ruta $rutaDescarga
+
+    # Metodo 2: Deshabilitar AppIDSvc si el metodo 1 no fue suficiente
+    $appIDSvc = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
+    if ($appIDSvc -and $appIDSvc.Status -eq "Running") {
+        Write-Host "  [INFO] AppIDSvc activo. Deteniendolo para instalacion..." -ForegroundColor Yellow
         try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            Invoke-WebRequest -Uri $VCREDIST_URL -OutFile "$MFA_DIR\vc_redist.x64.exe" -UseBasicParsing
-            Write-Info "Instalando Visual C++ de forma silenciosa..."
-            Start-Process -FilePath "$MFA_DIR\vc_redist.x64.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
-            Write-OK "Visual C++ instalado correctamente."
+            Stop-Service -Name "AppIDSvc" -Force -ErrorAction Stop
+            Write-Host "  [OK] AppIDSvc detenido. AppLocker temporalmente inactivo." -ForegroundColor Green
         }
         catch {
-            Write-Err "No se pudo instalar Visual C++. Verifique la conexion a internet."
+            Write-Host "  [WARN] No se pudo detener AppIDSvc: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+
+    Start-Sleep -Seconds 2
+
+    # -------------------------------------------------------
+    # PASO 1: Visual C++ 2022 Redistributable
+    # -------------------------------------------------------
+    Write-Host "`n  [1/2] Visual C++ 2022 Redistributable..." -ForegroundColor Yellow
+    $vcPath = "$rutaDescarga\vc_redist_2022_x64.exe"
+
+    # Verificar si ya esta instalado
+    $vcInstalado = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64" -ErrorAction SilentlyContinue
+    if ($vcInstalado) {
+        Write-Host "  [OK] VC++ 2022 ya esta instalado (version: $($vcInstalado.Version))." -ForegroundColor Green
+    }
+    else {
+        if (-not (Test-Path $vcPath)) {
+            try {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                Write-Host "  Descargando VC++ Redistributable..." -ForegroundColor Yellow
+                Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile $vcPath -UseBasicParsing -ErrorAction Stop
+                Write-Host "  [OK] Descargado." -ForegroundColor Green
+            }
+            catch {
+                Write-Host "  [ERROR] Descarga VC++: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  [INFO] Descarga manual: https://aka.ms/vs/17/release/vc_redist.x64.exe" -ForegroundColor Yellow
+                Write-Host "  [INFO] Guarda el archivo como: $vcPath" -ForegroundColor Yellow
+                Read-Host | Out-Null; return
+            }
+        }
+
+        Write-Host "  Instalando VC++ 2022..." -ForegroundColor Yellow
+
+        # CRITICO: copiar a C:\Windows\Temp (siempre permitido por GPO/AppLocker)
+        $vcTemp = "C:\Windows\Temp\vc_redist_p9.exe"
+        try {
+            Copy-Item -Path $vcPath -Destination $vcTemp -Force -ErrorAction Stop
+            Write-Host "  [OK] Copiado a ruta permitida por GPO: $vcTemp" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "  [WARN] No se pudo copiar a Temp. Usando ruta original." -ForegroundColor Yellow
+            $vcTemp = $vcPath
+        }
+
+        $vcOK = $false
+        # Intento 1: cmd /c desde Windows\Temp
+        cmd /c "`"$vcTemp`" /install /quiet /norestart" 2>&1 | Out-Null
+        if ($LASTEXITCODE -in @(0, 1638, 3010)) {
+            Write-Host "  [OK] VC++ 2022 instalado." -ForegroundColor Green
+            $vcOK = $true
+        }
+        # Intento 2: Start-Process
+        if (-not $vcOK) {
+            try {
+                $p2 = Start-Process -FilePath $vcTemp -ArgumentList "/install /quiet /norestart" -Wait -PassThru -ErrorAction Stop
+                if ($p2.ExitCode -in @(0, 1638, 3010)) {
+                    Write-Host "  [OK] VC++ instalado (intento 2)." -ForegroundColor Green
+                    $vcOK = $true
+                }
+            }
+            catch {}
+        }
+        # Intento 3: cmd.exe como proceso padre
+        if (-not $vcOK) {
+            try {
+                $p3 = Start-Process "cmd.exe" -ArgumentList "/c `"$vcTemp`" /install /quiet /norestart" -Wait -PassThru -ErrorAction Stop
+                if ($p3.ExitCode -in @(0, 1638, 3010)) {
+                    Write-Host "  [OK] VC++ instalado (intento 3)." -ForegroundColor Green
+                    $vcOK = $true
+                }
+            }
+            catch {}
+        }
+        if (-not $vcOK) {
+            Write-Host "  [WARN] VC++ no se pudo instalar automaticamente." -ForegroundColor Yellow
+            Write-Host "  [INFO] multiOTP puede instalarse igual. Continuando..." -ForegroundColor Cyan
+        }
+    } # cierre del else (VC++ no instalado)
+
+    Start-Sleep -Seconds 2
+
+    # -------------------------------------------------------
+    # PASO 2: Instalar multiOTP Credential Provider
+    # -------------------------------------------------------
+    Write-Host "`n  [2/2] Instalador multiOTP Credential Provider..." -ForegroundColor Yellow
+
+    # Extraer ZIPs si hay
+    Get-ChildItem -Path $rutaDescarga -Filter "*.zip" -ErrorAction SilentlyContinue | ForEach-Object {
+        $dest = "$rutaDescarga\Extracted_$($_.BaseName)"
+        if (-not (Test-Path $dest)) {
+            Write-Host "  Extrayendo: $($_.Name)..." -ForegroundColor Yellow
+            Expand-Archive -Path $_.FullName -DestinationPath $dest -Force
+            Write-Host "  [OK] Extraido en: $dest" -ForegroundColor Green
+        }
+    }
+
+    # Buscar instalador
+    $instalador = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } |
+    Sort-Object Length -Descending | Select-Object -First 1
+
+    if (-not $instalador) {
+        Write-Host "  [ERROR] No se encontro instalador multiOTP." -ForegroundColor Red
+        Write-Host "  [SOLUCION] Ejecuta primero la Opcion 1 para descargar multiOTP." -ForegroundColor Yellow
+        # Rehabilitar AppLocker antes de salir
+        $svcRestart = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
+        if ($svcRestart -and $svcRestart.Status -ne "Running") {
+            Start-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
+        }
+        Read-Host | Out-Null; return
+    }
+
+    Write-Host "`n  Instalador encontrado: $($instalador.Name)" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  +-------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  |   INSTRUCCIONES DEL INSTALADOR multiOTP         |" -ForegroundColor Yellow
+    Write-Host "  +-------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  1. En la primera pantalla marca:" -ForegroundColor White
+    Write-Host "     'No remote server, local multiOTP only'"         -ForegroundColor Green
+    Write-Host "  2. Logon  -> selecciona 'Local and Remote'"         -ForegroundColor White
+    Write-Host "  3. Unlock -> selecciona 'Local and Remote'"         -ForegroundColor White
+    Write-Host "  4. Haz clic en 'Next' hasta llegar a 'Finish'."     -ForegroundColor White
+    Write-Host "  5. Al terminar el instalador, este script seguira." -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Presiona Enter para lanzar el instalador..." -ForegroundColor Cyan
+    Read-Host | Out-Null
+
+    try {
+        if ($instalador.Extension -eq ".msi") {
+            Write-Host "  Instalando MSI..." -ForegroundColor Yellow
+            $p = Start-Process "msiexec.exe" -ArgumentList "/i `"$($instalador.FullName)`"" -Wait -PassThru -ErrorAction Stop
+        }
+        else {
+            Write-Host "  Instalando EXE..." -ForegroundColor Yellow
+            # Usar cmd /c para evitar bloqueo de AppLocker
+            $resultado = cmd /c "`"$($instalador.FullName)`"" 2>&1
+            $p = [PSCustomObject]@{ ExitCode = $LASTEXITCODE }
+            if ($p.ExitCode -ne 0) {
+                # Segundo intento con Start-Process
+                $p = Start-Process $instalador.FullName -Wait -PassThru -ErrorAction Stop
+            }
+        }
+        if ($p.ExitCode -eq 0) {
+            Write-Host "  [OK] multiOTP instalado correctamente." -ForegroundColor Green
+        }
+        else {
+            Write-Host "  [AVISO] Codigo de salida: $($p.ExitCode). Puede ser normal." -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [SOLUCION] Instala manualmente haciendo doble clic en: $($instalador.FullName)" -ForegroundColor Cyan
+    }
+
+    # -------------------------------------------------------
+    # Rehabilitar AppLocker
+    # -------------------------------------------------------
+    Write-Host "`n  Rehabilitando AppLocker..." -ForegroundColor Yellow
+    $svcFinal = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
+    if ($svcFinal -and $svcFinal.Status -ne "Running") {
+        try {
+            Start-Service -Name "AppIDSvc" -ErrorAction Stop
+            Write-Host "  [OK] AppIDSvc rehabilitado." -ForegroundColor Green
+        }
+        catch {
+            Write-Host "  [WARN] No se pudo rehabilitar AppIDSvc: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
     else {
-        Write-OK "Visual C++ ya esta presente."
+        Write-Host "  [OK] AppIDSvc ya estaba corriendo." -ForegroundColor Green
     }
 
-    # --- PASO 2: DESCARGAR E INSTALAR MULTIOTP ---
-    Write-Info "Configurando motor multiOTP..."
-    if (-not (Test-Path "$MFA_DIR\multiotp.exe")) {
-        try {
-            Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile "$MFA_DIR\multiotp.zip" -UseBasicParsing
-            Expand-Archive -Path "$MFA_DIR\multiotp.zip" -DestinationPath $MFA_DIR -Force
-            # Mover archivos si quedaron en una subcarpeta 'windows'
-            if (Test-Path "$MFA_DIR\windows\multiotp.exe") {
-                Move-Item -Path "$MFA_DIR\windows\*" -Destination $MFA_DIR -Force
-            }
-            Write-OK "Motor multiOTP descargado."
-        }
-        catch {
-            Write-Err "Error al descargar multiOTP."
-            return
-        }
-    }
-
-    # --- PASO 3: REGISTRAR CREDENTIAL PROVIDER ---
-    # Esto es lo que hace que Windows pida el codigo al entrar
-    Write-Info "Activando el prompt de MFA en el inicio de sesion..."
-    # Importante: Para que pida el codigo, el usuario debe estar creado en multiOTP
-    # y el CP debe estar registrado en el registro de Windows.
-    # El instalador .msi suele hacer esto, si usas el portable (.exe), 
-    # hay que registrar la DLL del Credential Provider manualmente.
-    
-    Write-Warn "Asegurese de ejecutar la opcion de 'Configurar MFA' para registrar al Administrador."
+    Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+    Read-Host | Out-Null
 }
 
 # =============================================================================
