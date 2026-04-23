@@ -5,7 +5,7 @@
 # =============================================================================
 
 $VCREDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-$MULTIOTP_URL = "https://download.multiotp.net/multiotp_windows.zip"
+$MULTIOTP_URL = "https://github.com/multiOTP/multiOTPCredentialProvider/releases/latest/download/multiOTPCredentialProvider.exe"
 $MFA_DIR = "C:\MFA"
 $WINOTP_URL = "https://github.com/nicowillis/WinOTP/releases/latest/download/WinOTP.msi"
 $WINOTP_MSI = "$MFA_DIR\WinOTP.msi"
@@ -231,18 +231,18 @@ function Instalar-MFA {
     Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } |
     Select-Object -First 1
     if (-not $hayInstalador) {
-        $zipPath = "$rutaDescarga\multiotp_windows.zip"
-        if (-not (Test-Path $zipPath)) {
+        $exePath = "$rutaDescarga\multiOTPCredentialProvider.exe"
+        if (-not (Test-Path $exePath)) {
             try {
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                Write-Host "  Descargando multiOTP..." -ForegroundColor Yellow
-                Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+                Write-Host "  Descargando multiOTP Credential Provider..." -ForegroundColor Yellow
+                Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile $exePath -UseBasicParsing -ErrorAction Stop
                 Write-Host "  [OK] multiOTP descargado." -ForegroundColor Green
             }
             catch {
                 Write-Host "  [ERROR] Descarga multiOTP: $($_.Exception.Message)" -ForegroundColor Red
                 Write-Host "  [INFO] Descarga manual: $MULTIOTP_URL" -ForegroundColor Yellow
-                Write-Host "  [INFO] Guarda el archivo como: $zipPath" -ForegroundColor Yellow
+                Write-Host "  [INFO] Guarda el archivo como: $exePath" -ForegroundColor Yellow
                 $svcRestart = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
                 if ($svcRestart -and $svcRestart.Status -ne "Running") {
                     Start-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
