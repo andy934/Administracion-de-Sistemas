@@ -236,7 +236,8 @@ function Instalar-MFA {
             try {
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                 Write-Host "  Descargando multiOTP Credential Provider..." -ForegroundColor Yellow
-                Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile $exePath -UseBasicParsing -ErrorAction Stop
+                Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile $exePath -UseBasicParsing -ErrorAction Stop `
+                    -Headers @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT; Windows NT 10.0) WindowsPowerShell/5.1' }
                 Write-Host "  [OK] multiOTP descargado." -ForegroundColor Green
             }
             catch {
