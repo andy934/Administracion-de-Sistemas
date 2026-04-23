@@ -113,7 +113,7 @@ function Instalar-MFA {
     Write-Host "  |   INSTALAR DEPENDENCIAS Y MOTOR MFA      |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    $rutaDescarga = "C:\MFA_Setup"
+    $rutaDescarga = "C:\MFA"
     $multiotpExe = Get-MultiOTPExe
     if ($multiotpExe) {
         Write-Host "  [OK] multiOTP ya instalado: $(Split-Path $multiotpExe)" -ForegroundColor Green
