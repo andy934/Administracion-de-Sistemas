@@ -53,18 +53,17 @@ function Verificar-Prerequisitos-MFA {
 
 function Get-MultiOTPExe {
     $rutas = @(
-        "C:\MFA_Setup\multiotp.exe",
-        "C:\MFA_Setup\windows\multiotp.exe",
+        "$MFA_DIR\multiotp.exe",
+        "$MFA_DIR\windows\multiotp.exe",
         "C:\Program Files\multiOTP\multiotp.exe",
-        "C:\Program Files (x86)\multiOTP\multiotp.exe",
-        "$MFA_DIR\multiotp.exe"
+        "C:\Program Files (x86)\multiOTP\multiotp.exe"
     )
     foreach ($r in $rutas) {
         if (Test-Path $r) { return $r }
     }
-    # Busqueda recursiva en C:\MFA_Setup si existe
-    if (Test-Path "C:\MFA_Setup") {
-        $found = Get-ChildItem -Path "C:\MFA_Setup" -Recurse -Filter "multiotp.exe" -ErrorAction SilentlyContinue |
+    # Busqueda recursiva en $MFA_DIR si existe
+    if (Test-Path $MFA_DIR) {
+        $found = Get-ChildItem -Path $MFA_DIR -Recurse -Filter "multiotp.exe" -ErrorAction SilentlyContinue |
         Select-Object -First 1
         if ($found) { return $found.FullName }
     }
@@ -113,7 +112,7 @@ function Instalar-MFA {
     Write-Host "  |   INSTALAR DEPENDENCIAS Y MOTOR MFA      |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    $rutaDescarga = "C:\MFA"
+    $rutaDescarga = $MFA_DIR
     $multiotpExe = Get-MultiOTPExe
     if ($multiotpExe) {
         Write-Host "  [OK] multiOTP ya instalado: $(Split-Path $multiotpExe)" -ForegroundColor Green
@@ -127,7 +126,7 @@ function Instalar-MFA {
     # -------------------------------------------------------
     Write-Host "  [PASO CRITICO] Manejando AppLocker para permitir instalacion..." -ForegroundColor Magenta
 
-    # Metodo 1: Agregar regla de ruta allow para C:\MFA_Setup y C:\Windows
+    # Metodo 1: Agregar regla de ruta allow para $MFA_DIR
     $reglaAgregada = Agregar-ReglaAppLockerRuta -Ruta $rutaDescarga
 
     # Metodo 2: Deshabilitar AppIDSvc si el metodo 1 no fue suficiente
@@ -226,6 +225,32 @@ function Instalar-MFA {
     # PASO 2: Instalar multiOTP Credential Provider
     # -------------------------------------------------------
     Write-Host "`n  [2/2] Instalador multiOTP Credential Provider..." -ForegroundColor Yellow
+
+    # Descargar ZIP de multiOTP si no hay ningun instalador todavia
+    $hayInstalador = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } |
+    Select-Object -First 1
+    if (-not $hayInstalador) {
+        $zipPath = "$rutaDescarga\multiotp_windows.zip"
+        if (-not (Test-Path $zipPath)) {
+            try {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                Write-Host "  Descargando multiOTP..." -ForegroundColor Yellow
+                Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile $zipPath -UseBasicParsing -ErrorAction Stop
+                Write-Host "  [OK] multiOTP descargado." -ForegroundColor Green
+            }
+            catch {
+                Write-Host "  [ERROR] Descarga multiOTP: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  [INFO] Descarga manual: $MULTIOTP_URL" -ForegroundColor Yellow
+                Write-Host "  [INFO] Guarda el archivo como: $zipPath" -ForegroundColor Yellow
+                $svcRestart = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
+                if ($svcRestart -and $svcRestart.Status -ne "Running") {
+                    Start-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
+                }
+                Read-Host | Out-Null; return
+            }
+        }
+    }
 
     # Extraer ZIPs si hay
     Get-ChildItem -Path $rutaDescarga -Filter "*.zip" -ErrorAction SilentlyContinue | ForEach-Object {
