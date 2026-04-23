@@ -73,7 +73,7 @@ function Mostrar-Menu {
     Write-Host "   7. Ver estado de auditoria y FGPP"
     Write-Host ""
     Write-Host "  -- MFA (Google Authenticator / TOTP) --------------------" -ForegroundColor Cyan
-    Write-Host "   8. Instalar y configurar MFA (WinOTP)"
+    Write-Host "   8. Instalar dependencias y motor MFA (multiOTP)"
     Write-Host "   9. Configurar politica de bloqueo (3 intentos/30 min)"
     Write-Host "  10. Ver cuentas bloqueadas"
     Write-Host "  11. Desbloquear cuenta"
@@ -113,7 +113,7 @@ function Configuracion-Completa-P9 {
     Configurar-Auditoria
 
     Write-Host ""; Write-Info "=== PASO 5/5: MFA (TOTP / Google Authenticator) ==="
-    Instalar-WinOTP
+    Instalar-MFA
 
     Write-Host ""
     Write-OK "Configuracion completa de Practica 9 finalizada."
@@ -140,7 +140,7 @@ while ($true) {
         "5" { Configurar-Auditoria }
         "6" { Generar-Reporte-Auditoria }
         "7" { Mostrar-Estado-Auditoria }
-        "8" { Instalar-WinOTP }
+        "8" { Instalar-MFA }
         "9" { Configurar-MFA-Politicas }
         "10" { Verificar-Cuentas-Bloqueadas }
         "11" { Desbloquear-Cuenta }
