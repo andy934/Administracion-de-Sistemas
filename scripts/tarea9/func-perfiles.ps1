@@ -110,7 +110,7 @@ function Configurar-PerfilesMoviles {
     foreach ($u in $usuarios) {
         $username = $u.Usuario
         try {
-            $adUser = Get-ADUser -Identity $username -ErrorAction Stop
+            Get-ADUser -Identity $username -ErrorAction Stop | Out-Null
             # Ruta del perfil con extension V6 (Windows 10/11/Server 2016+)
             $rutaPerfil = "\\$SERVIDOR\$PERFILES_SHARE\$username.V6"
             Set-ADUser -Identity $username -ProfilePath $rutaPerfil
@@ -124,7 +124,7 @@ function Configurar-PerfilesMoviles {
     # Tambien asignar a los 4 admins delegados
     foreach ($admin in $USUARIOS_ADMIN) {
         try {
-            $adUser = Get-ADUser -Identity $admin -ErrorAction Stop
+            Get-ADUser -Identity $admin -ErrorAction Stop | Out-Null
             $rutaPerfil = "\\$SERVIDOR\$PERFILES_SHARE\$admin.V6"
             Set-ADUser -Identity $admin -ProfilePath $rutaPerfil
             Write-OK "$admin -> $rutaPerfil"
@@ -150,8 +150,6 @@ function Configurar-PerfilesMoviles {
     }
 
     # Configurar redireccion de Documentos, Descargas y Escritorio via registro de GPO
-    $gpoId = $gpo.Id.ToString()
-
     # Habilitar sincronizacion de perfiles offline (Archivos sin conexion)
     Set-GPRegistryValue -Name $gpoNombre -Key "HKCU\Software\Policies\Microsoft\Windows\NetCache" `
         -ValueName "Enabled" -Type DWord -Value 1 -ErrorAction SilentlyContinue
@@ -161,9 +159,9 @@ function Configurar-PerfilesMoviles {
     Set-GPRegistryValue -Name $gpoNombre -Key "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\Winlogon" `
         -ValueName "SlowLinkDetect" -Type DWord -Value 0 -ErrorAction SilentlyContinue
 
-    # Eliminar copias locales del perfil al cerrar sesion
+    # Eliminar copias locales del perfil al cerrar sesion (1 = activado, comportamiento correcto)
     Set-GPRegistryValue -Name $gpoNombre -Key "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\Winlogon" `
-        -ValueName "DeleteRoamingCache" -Type DWord -Value 0 -ErrorAction SilentlyContinue
+        -ValueName "DeleteRoamingCache" -Type DWord -Value 1 -ErrorAction SilentlyContinue
 
     # Habilitar perfiles moviles para todos los usuarios
     Set-GPRegistryValue -Name $gpoNombre -Key "HKLM\SOFTWARE\Policies\Microsoft\Windows NT\CurrentVersion\Winlogon" `
@@ -215,6 +213,11 @@ function Configurar-PerfilesMoviles {
     # Configurar redireccion via GPO usando el proveedor de Group Policy
     # Estas claves aplican la redireccion de carpetas del lado del usuario
     $folderRedirKey = "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+
+    # NOTA: La redireccion real de carpetas requiere configuracion en GPMC (Group Policy Management Console)
+    # bajo: Configuracion de usuario > Directivas > Configuracion de Windows > Redireccion de carpetas
+    # No es configurable via Set-GPRegistryValue porque usa extensiones CSE propias.
+    # Las siguientes claves de registro son un respaldo para clientes sin soporte CSE completo:
 
     Set-GPRegistryValue -Name $gpoNombre -Key $folderRedirKey `
         -ValueName "Personal" -Type ExpandString `
