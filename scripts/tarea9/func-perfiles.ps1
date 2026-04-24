@@ -52,12 +52,17 @@ function Configurar-PerfilesMoviles {
 
     # Permisos de la carpeta: solo Administradores y SYSTEM tienen control total
     # Los usuarios solo pueden crear subcarpetas propias
+    # Resolver identidades via SID (evita problemas de idioma/localizacion)
+    $sidSystem = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-18")).Translate([System.Security.Principal.NTAccount]).Value
+    $sidAdmins = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")).Translate([System.Security.Principal.NTAccount]).Value
+    $sidAuthUsers = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-11")).Translate([System.Security.Principal.NTAccount]).Value
+
     $acl = Get-Acl $PERFILES_PATH
     $acl.SetAccessRuleProtection($true, $false)
 
-    $r1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-    $r2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-    $r3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Usuarios autenticados", "ReadAndExecute,Write,CreateFiles,CreateDirectories", "None", "None", "Allow"
+    $r1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidSystem, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $r2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidAdmins, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $r3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidAuthUsers, "ReadAndExecute,Write,CreateFiles,CreateDirectories", "None", "None", "Allow"
     $acl.AddAccessRule($r1)
     $acl.AddAccessRule($r2)
     $acl.AddAccessRule($r3)
@@ -86,9 +91,9 @@ function Configurar-PerfilesMoviles {
     $aclRedir = Get-Acl $REDIR_PATH
     $aclRedir.SetAccessRuleProtection($true, $false)
 
-    $rr1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-    $rr2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-    $rr3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Usuarios autenticados", "FullControl", "None", "None", "Allow"
+    $rr1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidSystem, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $rr2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidAdmins, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $rr3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidAuthUsers, "FullControl", "None", "None", "Allow"
     $aclRedir.AddAccessRule($rr1)
     $aclRedir.AddAccessRule($rr2)
     $aclRedir.AddAccessRule($rr3)
@@ -260,8 +265,8 @@ function Configurar-PerfilesMoviles {
         try {
             $aclPerfil = Get-Acl $perfilDir
             $aclPerfil.SetAccessRuleProtection($true, $false)
-            $pu1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-            $pu2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+            $pu1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidSystem, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+            $pu2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidAdmins, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
             $pu3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "$DOMINIO\$u", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
             $aclPerfil.AddAccessRule($pu1)
             $aclPerfil.AddAccessRule($pu2)
