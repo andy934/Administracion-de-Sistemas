@@ -452,39 +452,46 @@ function Configurar-TOTP-Manual {
 # =============================================================================
 
 function Configurar-MFA-Politicas {
-    Write-Info "Registrando usuario Administrator en MFA..."
-    $secret = "TZZ4KWHILQC6CZE7"
+    Write-Info "Iniciando configuracion dinamica de MFA..."
     
-    # 1. Asegurar que estamos en el directorio correcto
-    if (Test-Path $MFA_DIR) {
-        Set-Location $MFA_DIR
+    # Definimos donde guardaremos el secreto para no perderlo
+    $SECRETO_FILE = "$MFA_DIR\secreto_maestro.txt"
+    $SECURE_DIR = "C:\Program Files\multiOTP"
+
+    # 1. Obtener o Generar el Secreto
+    if (Test-Path $SECRETO_FILE) {
+        $secret = Get-Content $SECRETO_FILE
+        Write-Info "Reutilizando secreto existente encontrado en el servidor."
     }
     else {
-        Write-Err "Directorio MFA no encontrado."
-        return
+        # Generamos un secreto aleatorio de 16 caracteres (Base32 compatible)
+        $caracteres = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        $secret = -join ((1..16) | ForEach-Object { $caracteres[(Get-Random -Maximum $caracteres.Length)] })
+        $secret | Set-Content $SECRETO_FILE
+        Write-OK "Nuevo secreto unico generado y guardado en $SECRETO_FILE"
     }
 
-    # 2. Crear/Actualizar el usuario en el motor
-    # El comando -force asegura que si ya existe, se actualice con el nuevo secreto
-    .\multiotp.exe -create Administrator TOTP $secret 6 -force
-    
-    # 3. Activar el usuario y forzar el PIN (opcional)
-    .\multiotp.exe -set Administrator users_active=1
-    
-    # --- PASO CRÍTICO: INTEGRACIÓN CON WINDOWS ---
-    # Para que pida el código al entrar, el Credential Provider debe estar activo.
-    # Si instalaste el MSI, esto suele estar en el registro.
-    # Vamos a forzar la configuración del archivo de configuración global:
-    
+    # 2. Mover a ruta segura (Bypass de Directiva de Grupo)
+    if (Test-Path $MFA_DIR) {
+        if (-not (Test-Path $SECURE_DIR)) { New-Item -Path $SECURE_DIR -ItemType Directory -Force | Out-Null }
+        Copy-Item -Path "$MFA_DIR\*" -Destination $SECURE_DIR -Recurse -Force
+        Set-Location $SECURE_DIR
+    }
+
+    # 3. Registrar en el motor con el secreto dinamico
+    Write-Info "Vinculando Administrador con el secreto: $secret"
+    & ".\multiotp.exe" -create Administrator TOTP $secret 6 -force
+    & ".\multiotp.exe" -set Administrator users_active=1
+
+    # 4. Activar interfaz de Windows y Bloqueo AD (Igual que antes)
     if (Test-Path "multiotp.ini") {
-        Write-Info "Ajustando archivo de configuración para Login de Windows..."
-        # Aseguramos que el motor sepa que debe interactuar con el login
         (Get-Content multiotp.ini) -replace "display_logon=0", "display_logon=1" | Set-Content multiotp.ini
     }
 
-    Write-OK "MFA vinculado a Google Authenticator para Administrator."
-    Write-Info "Secreto para la app: $secret"
-    Write-Warn "RECUERDA: La hora del servidor debe coincidir con la de tu celular."
+    Write-OK "Configuracion completada con secreto dinamico."
+    Write-Host "----------------------------------------------------" -ForegroundColor Yellow
+    Write-Host " ESCANEA ESTE SECRETO EN TU CELULAR: $secret" -ForegroundColor Green
+    Write-Host "----------------------------------------------------" -ForegroundColor Yellow
 }
 
 # =============================================================================
