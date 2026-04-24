@@ -5,7 +5,7 @@
 # =============================================================================
 
 $VCREDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-$MULTIOTP_URL = "https://github.com/multiOTP/multiOTPCredentialProvider/releases/latest/download/multiOTPCredentialProvider.exe"
+$MULTIOTP_URL = "https://download.multiotp.net/credential-provider/multiOTPCredentialProvider.exe"
 $MFA_DIR = "C:\MFA"
 $WINOTP_URL = "https://github.com/nicowillis/WinOTP/releases/latest/download/WinOTP.msi"
 $WINOTP_MSI = "$MFA_DIR\WinOTP.msi"
@@ -234,10 +234,9 @@ function Instalar-MFA {
         $exePath = "$rutaDescarga\multiOTPCredentialProvider.exe"
         if (-not (Test-Path $exePath)) {
             try {
-                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                 Write-Host "  Descargando multiOTP Credential Provider..." -ForegroundColor Yellow
-                Invoke-WebRequest -Uri $MULTIOTP_URL -OutFile $exePath -UseBasicParsing -ErrorAction Stop `
-                    -Headers @{ 'User-Agent' = 'Mozilla/5.0 (Windows NT; Windows NT 10.0) WindowsPowerShell/5.1' }
+                $curlResult = curl.exe -L -o $exePath $MULTIOTP_URL 2>&1
+                if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo con codigo $LASTEXITCODE" }
                 Write-Host "  [OK] multiOTP descargado." -ForegroundColor Green
             }
             catch {
