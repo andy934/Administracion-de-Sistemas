@@ -5,7 +5,7 @@
 # =============================================================================
 
 $VCREDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-$MULTIOTP_URL = "https://download.multiotp.net/credential-provider/multiOTPCredentialProvider.exe"
+$MULTIOTP_URL = "https://github.com/multiOTP/multiOTPCredentialProvider/releases/latest/download/multiOTPCredentialProvider-5.10.2.2.zip"
 $MFA_DIR = "C:\MFA"
 $WINOTP_URL = "https://github.com/nicowillis/WinOTP/releases/latest/download/WinOTP.msi"
 $WINOTP_MSI = "$MFA_DIR\WinOTP.msi"
@@ -231,18 +231,27 @@ function Instalar-MFA {
     Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } |
     Select-Object -First 1
     if (-not $hayInstalador) {
-        $exePath = "$rutaDescarga\multiOTPCredentialProvider.exe"
-        if (-not (Test-Path $exePath)) {
+        $zipDest = "$rutaDescarga\multiOTPCredentialProvider.zip"
+        if (-not (Test-Path $zipDest)) {
             try {
-                Write-Host "  Descargando multiOTP Credential Provider..." -ForegroundColor Yellow
-                $curlResult = curl.exe -L -o $exePath $MULTIOTP_URL 2>&1
-                if ($LASTEXITCODE -ne 0) { throw "curl.exe fallo con codigo $LASTEXITCODE" }
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                # Resolver URL del ultimo release via API de GitHub
+                Write-Host "  Consultando ultima version de multiOTP..." -ForegroundColor Yellow
+                $wcApi = New-Object System.Net.WebClient
+                $wcApi.Headers.Add('User-Agent', 'PowerShell')
+                $apiJson = $wcApi.DownloadString('https://api.github.com/repos/multiOTP/multiOTPCredentialProvider/releases/latest') | ConvertFrom-Json
+                $asset = $apiJson.assets | Where-Object { $_.name -match '\.zip$' } | Select-Object -First 1
+                $downloadUrl = $asset.browser_download_url
+                Write-Host "  Descargando $($asset.name)..." -ForegroundColor Yellow
+                $wc = New-Object System.Net.WebClient
+                $wc.Headers.Add('User-Agent', 'PowerShell')
+                $wc.DownloadFile($downloadUrl, $zipDest)
                 Write-Host "  [OK] multiOTP descargado." -ForegroundColor Green
             }
             catch {
                 Write-Host "  [ERROR] Descarga multiOTP: $($_.Exception.Message)" -ForegroundColor Red
-                Write-Host "  [INFO] Descarga manual: $MULTIOTP_URL" -ForegroundColor Yellow
-                Write-Host "  [INFO] Guarda el archivo como: $exePath" -ForegroundColor Yellow
+                Write-Host "  [INFO] Descarga manual desde: https://github.com/multiOTP/multiOTPCredentialProvider/releases/latest" -ForegroundColor Yellow
+                Write-Host "  [INFO] Guarda el ZIP como: $zipDest" -ForegroundColor Yellow
                 $svcRestart = Get-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
                 if ($svcRestart -and $svcRestart.Status -ne "Running") {
                     Start-Service -Name "AppIDSvc" -ErrorAction SilentlyContinue
