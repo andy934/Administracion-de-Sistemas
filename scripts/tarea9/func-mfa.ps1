@@ -523,6 +523,7 @@ function Configurar-MFA-Politicas {
     & "$multiOTPDir\multiotp.exe" -create administrator TOTP $secret 6
     Start-Sleep -Seconds 1
     & "$multiOTPDir\multiotp.exe" -set administrator users_active=1
+    & "$multiOTPDir\multiotp.exe" -set administrator request_prefix_pin=0
 
     # Verificar que el usuario quedo registrado
     $checkUser = & "$multiOTPDir\multiotp.exe" -display administrator 2>&1
