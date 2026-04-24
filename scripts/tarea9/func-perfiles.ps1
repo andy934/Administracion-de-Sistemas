@@ -256,46 +256,68 @@ function Configurar-PerfilesMoviles {
 
     $todosUsuarios = ($usuarios | Select-Object -ExpandProperty Usuario) + $USUARIOS_ADMIN
     foreach ($u in $todosUsuarios) {
+        # 1. Rutas del Perfil Móvil (.V6)
         $perfilDir = "$PERFILES_PATH\$u.V6"
-        if (-not (Test-Path $perfilDir)) {
-            New-Item -Path $perfilDir -ItemType Directory -Force | Out-Null
+        
+        # 2. Rutas de Redirección (Donde jperez tiene el error)
+        $baseRedir = "$REDIR_PATH\$u"
+        $subCarpetas = @("Documentos", "Escritorio", "Descargas")
+
+        # --- CREACIÓN FÍSICA ---
+        # Crear Carpeta Perfil
+        if (-not (Test-Path $perfilDir)) { New-Item -Path $perfilDir -ItemType Directory -Force | Out-Null }
+        
+        # Crear Carpeta Redir y sus subcarpetas (Esto soluciona tu error actual)
+        if (-not (Test-Path $baseRedir)) { New-Item -Path $baseRedir -ItemType Directory -Force | Out-Null }
+        foreach ($sub in $subCarpetas) {
+            $path = Join-Path $baseRedir $sub
+            if (-not (Test-Path $path)) { New-Item -Path $path -ItemType Directory -Force | Out-Null }
         }
 
-        # Permisos: el usuario tiene control total sobre su propia carpeta
+        # --- APLICACIÓN DE PERMISOS (ACL) ---
         try {
-            $aclPerfil = Get-Acl $perfilDir
-            $aclPerfil.SetAccessRuleProtection($true, $false)
-            $pu1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidSystem, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-            $pu2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList $sidAdmins, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-            $pu3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "$DOMINIO\$u", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
-            $aclPerfil.AddAccessRule($pu1)
-            $aclPerfil.AddAccessRule($pu2)
-            $aclPerfil.AddAccessRule($pu3)
-            Set-Acl -Path $perfilDir -AclObject $aclPerfil
-            Write-OK "Carpeta V6 lista para: $u"
+            # Regla de acceso para el usuario específico
+            $reglaUser = New-Object System.Security.AccessControl.FileSystemAccessRule("$DOMINIO\$u", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+
+            # Aplicar al Perfil (.V6)
+            $aclP = Get-Acl $perfilDir
+            $aclP.SetAccessRuleProtection($true, $false)
+            $aclP.AddAccessRule($reglaUser)
+            Set-Acl -Path $perfilDir -AclObject $aclP
+
+            # Aplicar a Redirección (Y sus subcarpetas por herencia)
+            $aclR = Get-Acl $baseRedir
+            $aclR.SetAccessRuleProtection($true, $false)
+            $aclR.AddAccessRule($reglaUser)
+            Set-Acl -Path $baseRedir -AclObject $aclR
+            
+            # Forzar la herencia en las subcarpetas creadas
+            Get-ChildItem -Path $baseRedir -Recurse | Set-Acl -AclObject $aclR
+
+            Write-OK "Estructura completa lista para: $u"
         }
         catch {
-            Write-Warn "No se pudo configurar permisos para: $u"
+            Write-Warn "Error configurando permisos para: $u"
         }
     }
-
-    # -------------------------------------------------------
-    # PASO 7: Forzar actualizacion de politicas
-    # -------------------------------------------------------
-    Write-Info "Actualizando politicas de grupo..."
-    gpupdate /force | Out-Null
-    Write-OK "Politicas actualizadas."
-
-    Write-Host "`n  +------------------------------------------+" -ForegroundColor Green
-    Write-Host "  |   PERFILES MOVILES CONFIGURADOS          |" -ForegroundColor Green
-    Write-Host "  +------------------------------------------+" -ForegroundColor Green
-    Write-Host "  Carpeta perfiles : \\$SERVIDOR\$PERFILES_SHARE" -ForegroundColor White
-    Write-Host "  Carpeta redireccion: \\$SERVIDOR\$REDIR_SHARE" -ForegroundColor White
-    Write-Host "  Extension de perfil: .V6 (Windows 10/11/2016+)" -ForegroundColor White
-    Write-Host "  Usuarios configurados: $($todosUsuarios.Count)" -ForegroundColor White
-    Write-Host "`n  NOTA: Los clientes deben estar unidos al dominio" -ForegroundColor Yellow
-    Write-Host "  y hacer login para que el perfil se sincronice." -ForegroundColor Yellow
-    Write-Host ""
-
-    Read-Host "  Presiona Enter para volver al menu..." | Out-Null
 }
+
+# -------------------------------------------------------
+# PASO 7: Forzar actualizacion de politicas
+# -------------------------------------------------------
+Write-Info "Actualizando politicas de grupo..."
+gpupdate /force | Out-Null
+Write-OK "Politicas actualizadas."
+
+Write-Host "`n  +------------------------------------------+" -ForegroundColor Green
+Write-Host "  |   PERFILES MOVILES CONFIGURADOS          |" -ForegroundColor Green
+Write-Host "  +------------------------------------------+" -ForegroundColor Green
+Write-Host "  Carpeta perfiles : \\$SERVIDOR\$PERFILES_SHARE" -ForegroundColor White
+Write-Host "  Carpeta redireccion: \\$SERVIDOR\$REDIR_SHARE" -ForegroundColor White
+Write-Host "  Extension de perfil: .V6 (Windows 10/11/2016+)" -ForegroundColor White
+Write-Host "  Usuarios configurados: $($todosUsuarios.Count)" -ForegroundColor White
+Write-Host "`n  NOTA: Los clientes deben estar unidos al dominio" -ForegroundColor Yellow
+Write-Host "  y hacer login para que el perfil se sincronice." -ForegroundColor Yellow
+Write-Host ""
+
+Read-Host "  Presiona Enter para volver al menu..." | Out-Null
