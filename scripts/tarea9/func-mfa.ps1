@@ -330,6 +330,34 @@ function Instalar-MFA {
     }
 
     # -------------------------------------------------------
+    # Crear junction para que multiOTP encuentre los usuarios
+    # PHP resuelve rutas desde C:\Program Files\multiOTP\php\
+    # por eso necesita php\users -> users
+    # -------------------------------------------------------
+    Write-Host "`n  Configurando rutas de multiOTP..." -ForegroundColor Yellow
+    $multiOTPInstallDir = "C:\Program Files\multiOTP"
+    $junctionPath = "$multiOTPInstallDir\php\users"
+    $usersPath = "$multiOTPInstallDir\users"
+    if (Test-Path $multiOTPInstallDir) {
+        # Eliminar junction o carpeta previa si existe
+        if (Test-Path $junctionPath) {
+            Remove-Item $junctionPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        # Crear carpeta users si no existe
+        if (-not (Test-Path $usersPath)) {
+            New-Item -Path $usersPath -ItemType Directory -Force | Out-Null
+        }
+        # Crear junction php\users -> users
+        New-Item -ItemType Junction -Path $junctionPath -Target $usersPath -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "  [OK] Junction creado: php\users -> users" -ForegroundColor Green
+
+        # Establecer MULTIOTP_PATH como variable de entorno del sistema
+        [System.Environment]::SetEnvironmentVariable("MULTIOTP_PATH", $multiOTPInstallDir, "Machine")
+        $env:MULTIOTP_PATH = $multiOTPInstallDir
+        Write-Host "  [OK] MULTIOTP_PATH configurado: $multiOTPInstallDir" -ForegroundColor Green
+    }
+
+    # -------------------------------------------------------
     # Rehabilitar AppLocker
     # -------------------------------------------------------
     Write-Host "`n  Rehabilitando AppLocker..." -ForegroundColor Yellow
