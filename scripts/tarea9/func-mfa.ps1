@@ -518,21 +518,41 @@ function Configurar-MFA-Politicas {
         Remove-Item $userDb -Force
     }
 
-    # 3. Registrar en el motor con el secreto dinamico
-    Write-Info "Vinculando Administrador con el secreto: $secret"
-    & "$multiOTPDir\multiotp.exe" -create administrator TOTP $secret 6
-    Start-Sleep -Seconds 1
-    & "$multiOTPDir\multiotp.exe" -set administrator users_active=1
-    & "$multiOTPDir\multiotp.exe" -set administrator request_prefix_pin=0
+    # 3. Registrar usuarios en multiOTP
+    $caracteres = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
-    # Verificar que el usuario quedo registrado
-    $checkUser = & "$multiOTPDir\multiotp.exe" -display administrator 2>&1
-    if ($checkUser -match "ERROR") {
-        Write-Warn "No se pudo verificar el usuario en multiOTP. El secreto se guardo en: $SECRETO_FILE"
+    # Registrar Administrador
+    Write-Info "Vinculando Administrador con el secreto: $secret"
+    $dbAdmin = "$multiOTPDir\users\administrador.db"
+    if (Test-Path $dbAdmin) { Remove-Item $dbAdmin -Force }
+    & "$multiOTPDir\multiotp.exe" -create Administrador TOTP $secret 6
+    Start-Sleep -Seconds 1
+    & "$multiOTPDir\multiotp.exe" -set Administrador users_active=1
+    & "$multiOTPDir\multiotp.exe" -set Administrador request_prefix_pin=0
+
+    # Registrar los 4 administradores delegados con secretos individuales
+    Write-Host "`n  Registrando administradores delegados en multiOTP..." -ForegroundColor Yellow
+    $adminDelegados = @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria")
+    $secretosAdmin = @{}
+    foreach ($admin in $adminDelegados) {
+        $secretoAdmin = -join ((1..16) | ForEach-Object { $caracteres[(Get-Random -Maximum $caracteres.Length)] })
+        $secretosAdmin[$admin] = $secretoAdmin
+        $dbFile = "$multiOTPDir\users\$($admin.ToLower()).db"
+        if (Test-Path $dbFile) { Remove-Item $dbFile -Force }
+        & "$multiOTPDir\multiotp.exe" -create $admin TOTP $secretoAdmin 6
+        Start-Sleep -Milliseconds 500
+        & "$multiOTPDir\multiotp.exe" -set $admin users_active=1
+        & "$multiOTPDir\multiotp.exe" -set $admin request_prefix_pin=0
+        Write-OK "$admin registrado. Secreto: $secretoAdmin"
     }
-    else {
-        Write-OK "Usuario Administrator registrado correctamente en multiOTP."
+
+    # Guardar todos los secretos en archivo
+    $todosSecretos = @("Administrador : $secret")
+    foreach ($admin in $adminDelegados) {
+        $todosSecretos += "$admin : $($secretosAdmin[$admin])"
     }
+    $todosSecretos | Set-Content "$MFA_DIR\secretos_todos.txt" -Encoding UTF8
+    Write-OK "Todos los secretos guardados en: $MFA_DIR\secretos_todos.txt"
 
     # 4. Activar interfaz de Windows
     $iniPath = "$multiOTPDir\config\multiotp.ini"
