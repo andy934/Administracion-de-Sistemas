@@ -471,21 +471,44 @@ function Configurar-MFA-Politicas {
         Write-OK "Nuevo secreto unico generado y guardado en $SECRETO_FILE"
     }
 
-    # 2. Mover a ruta segura (Bypass de Directiva de Grupo)
-    if (Test-Path $MFA_DIR) {
-        if (-not (Test-Path $SECURE_DIR)) { New-Item -Path $SECURE_DIR -ItemType Directory -Force | Out-Null }
-        Copy-Item -Path "$MFA_DIR\*" -Destination $SECURE_DIR -Recurse -Force
-        Set-Location $SECURE_DIR
+    # 2. Establecer ruta base para que multiOTP encuentre sus archivos
+    $multiOTPDir = "C:\Program Files\multiOTP"
+    if (-not (Test-Path $multiOTPDir)) {
+        Write-Err "multiOTP no esta instalado en $multiOTPDir. Ejecuta primero la Opcion 8."
+        return
+    }
+
+    # Forzar variable de entorno MULTIOTP_PATH para que PHP resuelva rutas correctamente
+    $env:MULTIOTP_PATH = $multiOTPDir
+    [System.Environment]::SetEnvironmentVariable("MULTIOTP_PATH", $multiOTPDir, "Machine")
+
+    Set-Location $multiOTPDir
+
+    # Eliminar usuario si existe para recrearlo limpio
+    $userDb = "$multiOTPDir\users\administrator.db"
+    if (Test-Path $userDb) {
+        Remove-Item $userDb -Force
     }
 
     # 3. Registrar en el motor con el secreto dinamico
     Write-Info "Vinculando Administrador con el secreto: $secret"
-    & ".\multiotp.exe" -create Administrator TOTP $secret 6 -force
-    & ".\multiotp.exe" -set Administrator users_active=1
+    & "$multiOTPDir\multiotp.exe" -create administrator TOTP $secret 6
+    Start-Sleep -Seconds 1
+    & "$multiOTPDir\multiotp.exe" -set administrator users_active=1
 
-    # 4. Activar interfaz de Windows y Bloqueo AD (Igual que antes)
-    if (Test-Path "multiotp.ini") {
-        (Get-Content multiotp.ini) -replace "display_logon=0", "display_logon=1" | Set-Content multiotp.ini
+    # Verificar que el usuario quedo registrado
+    $checkUser = & "$multiOTPDir\multiotp.exe" -display administrator 2>&1
+    if ($checkUser -match "ERROR") {
+        Write-Warn "No se pudo verificar el usuario en multiOTP. El secreto se guardo en: $SECRETO_FILE"
+    }
+    else {
+        Write-OK "Usuario Administrator registrado correctamente en multiOTP."
+    }
+
+    # 4. Activar interfaz de Windows
+    $iniPath = "$multiOTPDir\config\multiotp.ini"
+    if (Test-Path $iniPath) {
+        (Get-Content $iniPath) -replace "display_logon=0", "display_logon=1" | Set-Content $iniPath
     }
 
     Write-OK "Configuracion completada con secreto dinamico."
