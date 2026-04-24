@@ -26,6 +26,14 @@ function Write-Err { param($m) Write-Host "  [ERROR] $m" -ForegroundColor Red }
 # =============================================================================
 
 function Configurar-PerfilesMoviles {
+    # Verificar que el script corre como Administrador elevado
+    $esAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $esAdmin) {
+        Write-Err "Este script debe ejecutarse como Administrador (elevado). Usa 'Ejecutar como administrador'."
+        Read-Host "  Presiona Enter para volver al menu..." | Out-Null
+        return
+    }
+
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
     Write-Host "  |   CONFIGURAR PERFILES MOVILES            |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
@@ -47,12 +55,12 @@ function Configurar-PerfilesMoviles {
     $acl = Get-Acl $PERFILES_PATH
     $acl.SetAccessRuleProtection($true, $false)
 
-    $reglas = @(
-        New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"),
-        New-Object System.Security.AccessControl.FileSystemAccessRule("Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"),
-        New-Object System.Security.AccessControl.FileSystemAccessRule("Usuarios autenticados", "ReadAndExecute,Write,CreateFiles,CreateDirectories", "None", "None", "Allow")
-    )
-    foreach ($regla in $reglas) { $acl.AddAccessRule($regla) }
+    $r1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $r2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $r3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Usuarios autenticados", "ReadAndExecute,Write,CreateFiles,CreateDirectories", "None", "None", "Allow"
+    $acl.AddAccessRule($r1)
+    $acl.AddAccessRule($r2)
+    $acl.AddAccessRule($r3)
     Set-Acl -Path $PERFILES_PATH -AclObject $acl
     Write-OK "Permisos NTFS aplicados en $PERFILES_PATH"
 
@@ -77,12 +85,13 @@ function Configurar-PerfilesMoviles {
 
     $aclRedir = Get-Acl $REDIR_PATH
     $aclRedir.SetAccessRuleProtection($true, $false)
-    $reglasRedir = @(
-        New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"),
-        New-Object System.Security.AccessControl.FileSystemAccessRule("Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"),
-        New-Object System.Security.AccessControl.FileSystemAccessRule("Usuarios autenticados", "FullControl", "None", "None", "Allow")
-    )
-    foreach ($r in $reglasRedir) { $aclRedir.AddAccessRule($r) }
+
+    $rr1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $rr2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    $rr3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Usuarios autenticados", "FullControl", "None", "None", "Allow"
+    $aclRedir.AddAccessRule($rr1)
+    $aclRedir.AddAccessRule($rr2)
+    $aclRedir.AddAccessRule($rr3)
     Set-Acl -Path $REDIR_PATH -AclObject $aclRedir
     Write-OK "Permisos NTFS aplicados en $REDIR_PATH"
 
@@ -251,9 +260,12 @@ function Configurar-PerfilesMoviles {
         try {
             $aclPerfil = Get-Acl $perfilDir
             $aclPerfil.SetAccessRuleProtection($true, $false)
-            $aclPerfil.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule("SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")))
-            $aclPerfil.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule("Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")))
-            $aclPerfil.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule("$DOMINIO\$u", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")))
+            $pu1 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+            $pu2 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "Administradores", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+            $pu3 = New-Object System.Security.AccessControl.FileSystemAccessRule -ArgumentList "$DOMINIO\$u", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+            $aclPerfil.AddAccessRule($pu1)
+            $aclPerfil.AddAccessRule($pu2)
+            $aclPerfil.AddAccessRule($pu3)
             Set-Acl -Path $perfilDir -AclObject $aclPerfil
             Write-OK "Carpeta V6 lista para: $u"
         }
