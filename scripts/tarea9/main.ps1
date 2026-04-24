@@ -15,6 +15,7 @@ function Write-Err { param($msg) Write-Host "[ERROR] $msg" -ForegroundColor Red 
 . "$ScriptDir\func-rbac.ps1"
 . "$ScriptDir\func-auditoria.ps1"
 . "$ScriptDir\func-mfa.ps1"
+. "$ScriptDir\func-perfiles.ps1"
 
 # =============================================================================
 # INDICADORES DE ESTADO
@@ -81,6 +82,7 @@ function Mostrar-Menu {
     Write-Host ""
     Write-Host "  -- UTILIDADES -------------------------------------------" -ForegroundColor Cyan
     Write-Host "  13. Configuracion completa (servidor limpio o actualizar)"
+    Write-Host "  15. Configurar perfiles moviles"
     Write-Host "  14. Ejecutar script de reporte standalone"
     Write-Host ""
     Write-Host "   0. Salir"
@@ -129,7 +131,7 @@ function Configuracion-Completa-P9 {
 
 while ($true) {
     Mostrar-Menu
-    $op = Read-Host "  Seleccione opcion (0-14)"
+    $op = Read-Host "  Seleccione opcion (0-15)"
     Write-Host ""
 
     switch ($op) {
@@ -146,6 +148,7 @@ while ($true) {
         "11" { Desbloquear-Cuenta }
         "12" { Mostrar-Estado-MFA }
         "13" { Configuracion-Completa-P9 }
+        "15" { Configurar-PerfilesMoviles }
         "14" {
             $ruta = Read-Host "  Ruta del reporte [C:\Auditoria\reporte.txt]"
             if (-not $ruta) { $ruta = "C:\Auditoria\reporte.txt" }
