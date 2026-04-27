@@ -33,14 +33,10 @@ services:
     volumes:
       - web_content:/usr/share/nginx/html/uploads
 
-    # Límites de recursos
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.50"
-        reservations:
-          memory: 64m
+    # ── Límites de recursos (standalone compose, NO swarm) ────
+    mem_limit: 512m
+    mem_reservation: 64m
+    cpus: "0.50"
 
     networks:
       infra_red:
@@ -82,14 +78,10 @@ services:
     expose:
       - "5432"
 
-    # Límites de recursos
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: "0.50"
-        reservations:
-          memory: 128m
+    # ── Límites de recursos (standalone compose, NO swarm) ────
+    mem_limit: 512m
+    mem_reservation: 128m
+    cpus: "0.50"
 
     networks:
       infra_red:
@@ -126,14 +118,10 @@ services:
     volumes:
       - web_content:/home/vsftpd/ftpuser
 
-    # Límites de recursos
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: "0.25"
-        reservations:
-          memory: 32m
+    # ── Límites de recursos (standalone compose, NO swarm) ────
+    mem_limit: 256m
+    mem_reservation: 32m
+    cpus: "0.25"
 
     networks:
       infra_red:
