@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>reprobados.local — Infraestructura</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- Fondo animado de partículas -->
+  <canvas id="grid-canvas"></canvas>
+
+  <div class="layout">
+
+    <!-- ── Header ──────────────────────────────────────────── -->
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="logo">
+          <span class="logo-bracket">[</span>
+          <span class="logo-text">REPROBADOS</span>
+          <span class="logo-dot">.</span>
+          <span class="logo-local">LOCAL</span>
+          <span class="logo-bracket">]</span>
+        </div>
+        <nav class="site-nav">
+          <a href="#servicios">Servicios</a>
+          <a href="#estado">Estado</a>
+          <a href="/uploads/">Archivos</a>
+        </nav>
+        <div class="status-pill">
+          <span class="pulse"></span>
+          ONLINE
+        </div>
+      </div>
+    </header>
+
+    <!-- ── Hero ────────────────────────────────────────────── -->
+    <section class="hero">
+      <div class="hero-tag">PRÁCTICA 10 // CONTENEDORES &amp; SEGURIDAD</div>
+      <h1 class="hero-title">
+        Infraestructura<br/>
+        <em>Contenerizada</em>
+      </h1>
+      <p class="hero-sub">
+        Servicios desplegados sobre Docker con red bridge aislada,
+        volúmenes persistentes y límites de recursos por contenedor.
+      </p>
+      <div class="hero-badges">
+        <span class="badge badge-nginx">nginx:alpine</span>
+        <span class="badge badge-pg">PostgreSQL 16</span>
+        <span class="badge badge-ftp">vsftpd / FTP</span>
+        <span class="badge badge-net">infra_red 172.20.0.0/16</span>
+      </div>
+    </section>
+
+    <!-- ── Servicios ────────────────────────────────────────── -->
+    <section class="section" id="servicios">
+      <div class="section-label">// SERVICIOS ACTIVOS</div>
+      <div class="services-grid">
+
+        <div class="service-card" style="--accent: #00e5ff;">
+          <div class="card-icon">⬡</div>
+          <div class="card-header">
+            <span class="card-name">web_server</span>
+            <span class="card-status running">▶ running</span>
+          </div>
+          <div class="card-detail">
+            <div class="detail-row"><span>Imagen</span><code>practica10-web:latest</code></div>
+            <div class="detail-row"><span>Puerto</span><code>80:8080</code></div>
+            <div class="detail-row"><span>Red</span><code>infra_red</code></div>
+            <div class="detail-row"><span>IP</span><code>172.20.0.10</code></div>
+            <div class="detail-row"><span>Usuario</span><code>nginx (UID 101)</code></div>
+            <div class="detail-row"><span>Volumen</span><code>web_content</code></div>
+          </div>
+        </div>
+
+        <div class="service-card" style="--accent: #69ff47;">
+          <div class="card-icon">▣</div>
+          <div class="card-header">
+            <span class="card-name">db_server</span>
+            <span class="card-status running">▶ running</span>
+          </div>
+          <div class="card-detail">
+            <div class="detail-row"><span>Imagen</span><code>postgres:16-alpine</code></div>
+            <div class="detail-row"><span>Puerto</span><code>5432 (interno)</code></div>
+            <div class="detail-row"><span>Red</span><code>infra_red</code></div>
+            <div class="detail-row"><span>IP</span><code>172.20.0.20</code></div>
+            <div class="detail-row"><span>Volumen</span><code>db_data</code></div>
+            <div class="detail-row"><span>RAM límite</span><code>512 MB</code></div>
+          </div>
+        </div>
+
+        <div class="service-card" style="--accent: #ff6b35;">
+          <div class="card-icon">◈</div>
+          <div class="card-header">
+            <span class="card-name">ftp_server</span>
+            <span class="card-status running">▶ running</span>
+          </div>
+          <div class="card-detail">
+            <div class="detail-row"><span>Imagen</span><code>fauria/vsftpd</code></div>
+            <div class="detail-row"><span>Puerto</span><code>21, 21100-21110</code></div>
+            <div class="detail-row"><span>Red</span><code>infra_red</code></div>
+            <div class="detail-row"><span>IP</span><code>172.20.0.30</code></div>
+            <div class="detail-row"><span>Volumen</span><code>web_content:/home/ftpuser</code></div>
+            <div class="detail-row"><span>RAM límite</span><code>256 MB</code></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── Estado ───────────────────────────────────────────── -->
+    <section class="section" id="estado">
+      <div class="section-label">// ESTADO DEL SISTEMA</div>
+      <div class="terminal-block">
+        <div class="terminal-bar">
+          <span class="t-dot t-red"></span>
+          <span class="t-dot t-yellow"></span>
+          <span class="t-dot t-green"></span>
+          <span class="t-title">docker stats --no-stream</span>
+        </div>
+        <div class="terminal-body">
+          <div class="t-row t-header">
+            <span>CONTAINER</span><span>CPU%</span><span>MEM USAGE/LIMIT</span><span>NET I/O</span><span>STATUS</span>
+          </div>
+          <div class="t-row">
+            <span class="t-name">web_server</span>
+            <span class="t-cpu">0.2%</span>
+            <span class="t-mem">12MiB / 512MiB</span>
+            <span class="t-net">1.2kB / 4.8kB</span>
+            <span class="t-ok">OK</span>
+          </div>
+          <div class="t-row">
+            <span class="t-name">db_server</span>
+            <span class="t-cpu">0.1%</span>
+            <span class="t-mem">28MiB / 512MiB</span>
+            <span class="t-net">0B / 0B</span>
+            <span class="t-ok">OK</span>
+          </div>
+          <div class="t-row">
+            <span class="t-name">ftp_server</span>
+            <span class="t-cpu">0.0%</span>
+            <span class="t-mem">4MiB / 256MiB</span>
+            <span class="t-net">0B / 0B</span>
+            <span class="t-ok">OK</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Footer ───────────────────────────────────────────── -->
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <span>reprobados.local // Administración de Sistemas 2026</span>
+        <span>Práctica 10 — Virtualización y Contenedores</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="js/canvas.js"></script>
+</body>
+</html>

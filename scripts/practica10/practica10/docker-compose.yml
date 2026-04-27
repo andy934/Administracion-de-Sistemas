@@ -1,0 +1,165 @@
+# ═══════════════════════════════════════════════════════════════
+# Práctica 10 — Virtualización, Persistencia y Seguridad
+# Autor: Administración de Sistemas 2026 — reprobados.local
+# ═══════════════════════════════════════════════════════════════
+#
+# Servicios:
+#   web_server  — Nginx Alpine personalizado (usuario no-root)
+#   db_server   — PostgreSQL 16 Alpine con volumen persistente
+#   ftp_server  — vsftpd con volumen compartido al servidor web
+#
+# Red: infra_red (bridge 172.20.0.0/16)
+# Volúmenes: db_data, web_content
+# ═══════════════════════════════════════════════════════════════
+
+services:
+
+  # ─────────────────────────────────────────────────────────────
+  # 1. SERVIDOR WEB — Nginx Alpine personalizado
+  # ─────────────────────────────────────────────────────────────
+  web_server:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: web_server
+    image: practica10-web:latest
+    restart: unless-stopped
+
+    # Puerto: host:contenedor (8080 interno por usuario no-root)
+    ports:
+      - "80:8080"
+
+    # Volumen persistente para contenido web
+    volumes:
+      - web_content:/usr/share/nginx/html/uploads
+
+    # Límites de recursos
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.50"
+        reservations:
+          memory: 64m
+
+    networks:
+      infra_red:
+        ipv4_address: 172.20.0.10
+
+    depends_on:
+      - db_server
+      - ftp_server
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. BASE DE DATOS — PostgreSQL 16 Alpine
+  # ─────────────────────────────────────────────────────────────
+  db_server:
+    image: postgres:16-alpine
+    container_name: db_server
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB:       reprobados_db
+      POSTGRES_USER:     db_admin
+      POSTGRES_PASSWORD: Practica10.Segura!
+      PGDATA:            /var/lib/postgresql/data/pgdata
+
+    # Volumen persistente — datos sobreviven a docker rm -f
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # Script de inicialización (se ejecuta la primera vez)
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # Carpeta de respaldos en el host
+      - ./backups:/backups
+
+    # Puerto NO expuesto al host (solo accesible desde infra_red)
+    expose:
+      - "5432"
+
+    # Límites de recursos
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.50"
+        reservations:
+          memory: 128m
+
+    networks:
+      infra_red:
+        ipv4_address: 172.20.0.20
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U db_admin -d reprobados_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. SERVIDOR FTP — vsftpd con volumen compartido
+  # ─────────────────────────────────────────────────────────────
+  ftp_server:
+    image: fauria/vsftpd
+    container_name: ftp_server
+    restart: unless-stopped
+
+    environment:
+      FTP_USER:          ftpuser
+      FTP_PASS:          Ftp.Practica10!
+      PASV_ADDRESS:      127.0.0.1
+      PASV_MIN_PORT:     21100
+      PASV_MAX_PORT:     21110
+      LOG_STDOUT:        "YES"
+
+    ports:
+      - "21:21"
+      - "21100-21110:21100-21110"
+
+    # Volumen compartido con web_server — archivos subidos por FTP
+    # son visibles en /uploads/ del servidor web
+    volumes:
+      - web_content:/home/vsftpd/ftpuser
+
+    # Límites de recursos
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.25"
+        reservations:
+          memory: 32m
+
+    networks:
+      infra_red:
+        ipv4_address: 172.20.0.30
+
+# ─────────────────────────────────────────────────────────────
+# VOLÚMENES PERSISTENTES
+# ─────────────────────────────────────────────────────────────
+volumes:
+  db_data:
+    name: db_data
+    driver: local
+
+  web_content:
+    name: web_content
+    driver: local
+
+# ─────────────────────────────────────────────────────────────
+# RED BRIDGE PERSONALIZADA
+# ─────────────────────────────────────────────────────────────
+networks:
+  infra_red:
+    name: infra_red
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
