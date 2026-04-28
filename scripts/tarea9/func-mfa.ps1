@@ -411,14 +411,14 @@ function Configurar-TOTP-Manual {
     }
 
     $cuenta = "Administrador"
-    $emisor = "reprobados.com"
+    $emisor = "reprobados.local"
     $totpUrl = "otpauth://totp/${emisor}:${cuenta}?secret=${secret}&issuer=${emisor}&algorithm=SHA1&digits=6&period=30"
 
     # Guardar secreto
     $info = @(
         "=" * 50,
         "CONFIGURACION MFA - TOTP",
-        "Practica 9 - reprobados.com",
+        "Practica 9 - reprobados.local",
         "Generado: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
         "=" * 50,
         "",
@@ -459,9 +459,9 @@ function Configurar-TOTP-Manual {
     $html = @"
 <!DOCTYPE html>
 <html>
-<head><title>MFA QR - reprobados.com</title></head>
+<head><title>MFA QR - reprobados.local</title></head>
 <body style='font-family:Arial;text-align:center;padding:20px'>
-<h2>Configuracion MFA - reprobados.com</h2>
+<h2>Configuracion MFA - reprobados.local</h2>
 <p>Escanea este codigo con Google Authenticator</p>
 <img src='$qrUrl' alt='QR Code MFA' width='200' height='200'/>
 <p><b>Secreto:</b> $secret</p>
@@ -543,7 +543,8 @@ function Configurar-MFA-Politicas {
             # Reutilizar secreto existente — no rompe el QR ya escaneado
             $secretoAdmin = Get-Content $secretoFile
             Write-Info "$admin — reutilizando secreto existente."
-        } else {
+        }
+        else {
             # Primera vez: generar y guardar
             $secretoAdmin = -join ((1..16) | ForEach-Object { $caracteres[(Get-Random -Maximum $caracteres.Length)] })
             $secretoAdmin | Set-Content $secretoFile -Encoding UTF8
@@ -563,7 +564,7 @@ function Configurar-MFA-Politicas {
     # Guardar resumen de todos los secretos
     $todosSecretos = @(
         "=" * 50,
-        "SECRETOS MFA — reprobados.com",
+        "SECRETOS MFA — reprobados.local",
         "Actualizado: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
         "=" * 50,
         "",
