@@ -530,12 +530,26 @@ function Configurar-MFA-Politicas {
     & "$multiOTPDir\multiotp.exe" -set Administrador users_active=1
     & "$multiOTPDir\multiotp.exe" -set Administrador request_prefix_pin=0
 
-    # Registrar los 4 administradores delegados con secretos individuales
+    # Registrar los 4 administradores delegados con secretos individuales PERSISTENTES
+    # CORRECCION: cada admin tiene su propio archivo de secreto, igual que Administrador.
+    # Si el archivo ya existe se reutiliza — el QR escaneado en el celular sigue valido.
     Write-Host "`n  Registrando administradores delegados en multiOTP..." -ForegroundColor Yellow
     $adminDelegados = @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria")
     $secretosAdmin = @{}
     foreach ($admin in $adminDelegados) {
-        $secretoAdmin = -join ((1..16) | ForEach-Object { $caracteres[(Get-Random -Maximum $caracteres.Length)] })
+        $secretoFile = "$MFA_DIR\secreto_$($admin).txt"
+
+        if (Test-Path $secretoFile) {
+            # Reutilizar secreto existente — no rompe el QR ya escaneado
+            $secretoAdmin = Get-Content $secretoFile
+            Write-Info "$admin — reutilizando secreto existente."
+        } else {
+            # Primera vez: generar y guardar
+            $secretoAdmin = -join ((1..16) | ForEach-Object { $caracteres[(Get-Random -Maximum $caracteres.Length)] })
+            $secretoAdmin | Set-Content $secretoFile -Encoding UTF8
+            Write-OK "$admin — nuevo secreto generado y guardado."
+        }
+
         $secretosAdmin[$admin] = $secretoAdmin
         $dbFile = "$multiOTPDir\users\$($admin.ToLower()).db"
         if (Test-Path $dbFile) { Remove-Item $dbFile -Force }
@@ -546,13 +560,22 @@ function Configurar-MFA-Politicas {
         Write-OK "$admin registrado. Secreto: $secretoAdmin"
     }
 
-    # Guardar todos los secretos en archivo
-    $todosSecretos = @("Administrador : $secret")
+    # Guardar resumen de todos los secretos
+    $todosSecretos = @(
+        "=" * 50,
+        "SECRETOS MFA — reprobados.com",
+        "Actualizado: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
+        "=" * 50,
+        "",
+        "Administrador : $secret"
+    )
     foreach ($admin in $adminDelegados) {
         $todosSecretos += "$admin : $($secretosAdmin[$admin])"
     }
+    $todosSecretos += ""
+    $todosSecretos += "NOTA: Cada secreto tambien tiene su propio archivo en C:\MFA\secreto_<usuario>.txt"
     $todosSecretos | Set-Content "$MFA_DIR\secretos_todos.txt" -Encoding UTF8
-    Write-OK "Todos los secretos guardados en: $MFA_DIR\secretos_todos.txt"
+    Write-OK "Resumen de secretos guardado en: $MFA_DIR\secretos_todos.txt"
 
     # 4. Activar interfaz de Windows
     $iniPath = "$multiOTPDir\config\multiotp.ini"
