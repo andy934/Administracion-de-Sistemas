@@ -562,11 +562,13 @@ function Configurar-MFA-Politicas {
     }
 
     # Guardar resumen de todos los secretos
+    $linea = "================================================="
+    $fecha = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $todosSecretos = @(
-        "=" * 50,
+        $linea,
         "SECRETOS MFA - reprobados.local",
-        "Actualizado: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
-        "=" * 50,
+        "Actualizado: $fecha",
+        $linea,
         "",
         "Administrador : $secret"
     )
