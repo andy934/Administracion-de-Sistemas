@@ -147,17 +147,3 @@ for CONTAINER in web_server db_server ftp_server; do
         info "$CONTAINER: Sin límite de memoria configurado (revisar deploy.resources en compose)"
     fi
 done
-
-# ─────────────────────────────────────────────────────────────
-# RESUMEN
-# ─────────────────────────────────────────────────────────────
-sep
-echo -e "\n${YELLOW}  RESUMEN DEL PROTOCOLO${NC}"
-echo ""
-echo "  Para evidencia en el reporte:"
-echo "  • docker stats --no-stream"
-echo "  • docker network inspect infra_red"
-echo "  • docker inspect web_server db_server ftp_server | grep -i memory"
-echo "  • docker volume ls && docker volume inspect db_data web_content"
-sep
-echo ""
