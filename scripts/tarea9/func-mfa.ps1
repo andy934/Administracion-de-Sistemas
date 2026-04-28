@@ -532,7 +532,7 @@ function Configurar-MFA-Politicas {
 
     # Registrar los 4 administradores delegados con secretos individuales PERSISTENTES
     # CORRECCION: cada admin tiene su propio archivo de secreto, igual que Administrador.
-    # Si el archivo ya existe se reutiliza — el QR escaneado en el celular sigue valido.
+    # Si el archivo ya existe se reutiliza -- el QR escaneado en el celular sigue valido.
     Write-Host "`n  Registrando administradores delegados en multiOTP..." -ForegroundColor Yellow
     $adminDelegados = @("admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria")
     $secretosAdmin = @{}
@@ -540,15 +540,15 @@ function Configurar-MFA-Politicas {
         $secretoFile = "$MFA_DIR\secreto_$($admin).txt"
 
         if (Test-Path $secretoFile) {
-            # Reutilizar secreto existente — no rompe el QR ya escaneado
+            # Reutilizar secreto existente -- no rompe el QR ya escaneado
             $secretoAdmin = Get-Content $secretoFile
-            Write-Info "$admin — reutilizando secreto existente."
+            Write-Info "$admin -- reutilizando secreto existente."
         }
         else {
             # Primera vez: generar y guardar
             $secretoAdmin = -join ((1..16) | ForEach-Object { $caracteres[(Get-Random -Maximum $caracteres.Length)] })
             $secretoAdmin | Set-Content $secretoFile -Encoding UTF8
-            Write-OK "$admin — nuevo secreto generado y guardado."
+            Write-OK "$admin -- nuevo secreto generado y guardado."
         }
 
         $secretosAdmin[$admin] = $secretoAdmin
@@ -564,7 +564,7 @@ function Configurar-MFA-Politicas {
     # Guardar resumen de todos los secretos
     $todosSecretos = @(
         "=" * 50,
-        "SECRETOS MFA — reprobados.local",
+        "SECRETOS MFA - reprobados.local",
         "Actualizado: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
         "=" * 50,
         "",
