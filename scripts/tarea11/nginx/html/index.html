@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>reprobados.local — Infraestructura</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;600;800&display=swap');
+
+  :root {
+    --verde:   #00ff9d;
+    --azul:    #00cfff;
+    --fondo:   #060a0f;
+    --panel:   #0d1520;
+    --borde:   #1a2a3a;
+    --texto:   #c8d8e8;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: 'Exo 2', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  /* Grid de fondo */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+
+  .logo {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--verde);
+    letter-spacing: 0.3em;
+    margin-bottom: 0.5rem;
+    opacity: 0.7;
+  }
+
+  h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--verde), var(--azul));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+    color: #4a6a8a;
+    margin-top: 0.5rem;
+    letter-spacing: 0.15em;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.2rem;
+    width: min(700px, 90vw);
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 1.4rem 1.6rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.2s;
+  }
+
+  .card:hover {
+    border-color: var(--verde);
+    transform: translateY(-2px);
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--verde), var(--azul));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .card:hover::before { opacity: 1; }
+
+  .card-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--verde);
+    letter-spacing: 0.2em;
+    margin-bottom: 0.4rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #e8f4ff;
+    margin-bottom: 0.3rem;
+  }
+
+  .card-desc {
+    font-size: 0.8rem;
+    color: #4a6a8a;
+    line-height: 1.5;
+  }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--verde);
+    margin-top: 0.8rem;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--verde);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  .app-link {
+    display: inline-block;
+    margin-top: 0.8rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--verde);
+    border-radius: 4px;
+    color: var(--verde);
+    text-decoration: none;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .app-link:hover {
+    background: var(--verde);
+    color: var(--fondo);
+  }
+
+  footer {
+    margin-top: 3rem;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: #1a3a5a;
+    letter-spacing: 0.15em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">// NGINX BALANCEADOR — PRÁCTICA 11</div>
+  <h1>reprobados.local</h1>
+  <div class="subtitle">Infraestructura Multicapa · Administración de Sistemas 2026</div>
+</header>
+
+<div class="grid">
+
+  <div class="card">
+    <div class="card-label">SERVICIO 01</div>
+    <div class="card-title">Balanceador Nginx</div>
+    <div class="card-desc">Único punto de entrada público. Distribuye tráfico y oculta cabeceras de versión.</div>
+    <div class="status"><span class="dot"></span>ONLINE · :80</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">SERVICIO 02</div>
+    <div class="card-title">Servidor de Aplicaciones</div>
+    <div class="card-desc">Contenedor interno sin puertos expuestos. Solo accesible vía proxy nginx.</div>
+    <a href="/app/" class="app-link">→ /app/</a>
+  </div>
+
+  <div class="card">
+    <div class="card-label">SERVICIO 03</div>
+    <div class="card-title">PostgreSQL 16</div>
+    <div class="card-desc">Base de datos aislada en red_datos. Volumen persistente db_data activo.</div>
+    <div class="status"><span class="dot"></span>INTERNO · red_datos</div>
+  </div>
+
+  <div class="card">
+    <div class="card-label">SERVICIO 04</div>
+    <div class="card-title">pgAdmin</div>
+    <div class="card-desc">Panel administrativo bloqueado externamente. Acceso solo por túnel SSH cifrado.</div>
+    <div class="status"><span class="dot"></span>TUNEL SSH · :5050</div>
+  </div>
+
+</div>
+
+<footer>// INFRAESTRUCTURA COMO CÓDIGO · DOCKER COMPOSE · ROCKY LINUX</footer>
+
+</body>
+</html>
