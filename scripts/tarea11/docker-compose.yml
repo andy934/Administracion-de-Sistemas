@@ -148,4 +148,5 @@ networks:
   red_datos:
     name: red_datos
     driver: bridge
-    internal: true    # ← completamente aislada del exterior
+    # Aislamiento via firewall (ver README)
+    # internal: true se omite para permitir port binding de pgAdmin al host
