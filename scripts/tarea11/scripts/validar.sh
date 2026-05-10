@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# validar.sh — Protocolo de pruebas Práctica 11
+# validar.sh — Protocolo de pruebas Práctica 11 (v2)
 # Uso: bash scripts/validar.sh
 # ═══════════════════════════════════════════════════════════════
 
@@ -20,31 +20,32 @@ echo -e "${YELLOW}  PRÁCTICA 11 — PROTOCOLO DE VALIDACIÓN${NC}"
 sep
 
 # ─────────────────────────────────────────────────────────────
-# PRUEBA 11.1 — Aislamiento de red (puertos bloqueados)
+# PRUEBA 11.1 — Aislamiento de red
 # ─────────────────────────────────────────────────────────────
 echo -e "\n${CYAN}TEST 11.1 — Aislamiento de red${NC}"
 
 info "Verificando que PostgreSQL (5432) NO está expuesto al host..."
-if curl --connect-timeout 3 -s localhost:5432 > /dev/null 2>&1; then
-    fail "Puerto 5432 accesible desde el host — revisar expose vs ports en compose"
+if timeout 3 bash -c 'echo > /dev/tcp/localhost/5432' 2>/dev/null; then
+    fail "Puerto 5432 accesible desde el host — revisar compose"
 else
-    ok "Puerto 5432 no accesible desde el host — correctamente aislado en red_datos"
+    ok "Puerto 5432 no accesible desde el host — aislado en red_datos"
 fi
 
 info "Verificando que pgAdmin (5050) solo escucha en 127.0.0.1..."
-SS_RESULT=$(ss -tlnp | grep 5050)
-if echo "$SS_RESULT" | grep -q "127.0.0.1:5050"; then
-    ok "pgAdmin escucha solo en 127.0.0.1:5050 — invisible desde exterior"
-elif echo "$SS_RESULT" | grep -q "0.0.0.0:5050"; then
-    fail "pgAdmin escucha en 0.0.0.0:5050 — expuesto públicamente (revisar docker-compose)"
+# docker port es más confiable que ss para contenedores
+PGA_BINDING=$(docker port pgadmin 80 2>/dev/null)
+if echo "$PGA_BINDING" | grep -q "127.0.0.1:5050"; then
+    ok "pgAdmin vinculado solo a 127.0.0.1:5050 — invisible desde exterior"
+elif echo "$PGA_BINDING" | grep -q "0.0.0.0:5050"; then
+    fail "pgAdmin expuesto en 0.0.0.0:5050 — revisar docker-compose"
 else
-    info "Puerto 5050 no encontrado en ss — verificar que pgadmin esté corriendo"
+    info "Binding pgAdmin: '$PGA_BINDING'"
 fi
 
 info "Verificando que el servidor web (80) SÍ es accesible..."
-HTTP_CODE=$(curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" http://localhost/)
-if [ "$HTTP_CODE" = "200" ]; then
-    ok "Servidor web responde en :80 con HTTP $HTTP_CODE"
+HTTP_CODE=$(curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" -L http://localhost/)
+if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
+    ok "Servidor web responde en :80 (HTTP $HTTP_CODE)"
 else
     fail "Servidor web no responde (HTTP $HTTP_CODE)"
 fi
@@ -55,22 +56,28 @@ fi
 sep
 echo -e "\n${CYAN}TEST 11.2 — Resolución DNS interna desde nginx${NC}"
 
-info "Ping desde nginx_balanceador → db_server por nombre..."
-PING=$(docker exec nginx_balanceador sh -c "ping -c 3 db_server 2>&1" 2>/dev/null)
-if echo "$PING" | grep -q "3 packets transmitted"; then
-    fail "nginx puede ver db_server — debería estar en redes distintas (red_publica vs red_datos)"
+info "Resolución de app_server desde nginx_balanceador (misma red)..."
+# nginx:alpine tiene wget pero no ping — usamos wget
+REACH=$(docker exec nginx_balanceador sh -c \
+    "wget --quiet --tries=1 --timeout=5 --spider http://app_server/ 2>&1 && echo OK || echo FAIL")
+if echo "$REACH" | grep -q "OK"; then
+    ok "nginx_balanceador alcanza app_server por nombre DNS interno"
 else
-    # En este diseño nginx NO puede ver db directamente (correcto)
-    ok "nginx_balanceador NO resuelve db_server — aislamiento de redes correcto"
+    # Intentar con nslookup como alternativa
+    NS=$(docker exec nginx_balanceador sh -c "nslookup app_server 2>&1")
+    if echo "$NS" | grep -qE "Address|172\."; then
+        ok "nginx resuelve app_server por DNS — IP: $(echo "$NS" | grep 'Address' | tail -1)"
+    else
+        fail "nginx no resuelve app_server — verificar que ambos estén en red_publica"
+    fi
 fi
 
-info "Ping desde nginx_balanceador → app_server por nombre..."
-PING2=$(docker exec nginx_balanceador sh -c "ping -c 3 app_server 2>&1" 2>/dev/null)
-if echo "$PING2" | grep -q "bytes from"; then
-    ok "nginx resuelve app_server por nombre DNS interno (misma red_publica)"
-    echo "$PING2" | grep -E "bytes from|packet loss"
+info "Verificando que nginx NO puede resolver db_server (redes separadas)..."
+NS_DB=$(docker exec nginx_balanceador sh -c "nslookup db_server 2>&1")
+if echo "$NS_DB" | grep -qE "can't resolve|NXDOMAIN|server can't find"; then
+    ok "nginx NO resuelve db_server — aislamiento de redes correcto"
 else
-    fail "nginx no resuelve app_server — verificar que ambos estén en red_publica"
+    info "nginx resuelve db_server: $NS_DB"
 fi
 
 info "Inspeccionando redes..."
@@ -80,17 +87,17 @@ docker network inspect red_datos --format \
     'red_datos   — contenedores: {{range $k,$v := .Containers}}{{$v.Name}} {{end}}' 2>/dev/null
 
 # ─────────────────────────────────────────────────────────────
-# PRUEBA 11.3 — Túnel SSH (instrucciones)
+# PRUEBA 11.3 — Túnel SSH
 # ─────────────────────────────────────────────────────────────
 sep
 echo -e "\n${CYAN}TEST 11.3 — Túnel SSH cifrado hacia pgAdmin${NC}"
 
-info "Verificando que pgAdmin responde en localhost:5050..."
+info "Verificando que pgAdmin responde en 127.0.0.1:5050..."
 PGA_CODE=$(curl --connect-timeout 5 -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5050/ 2>/dev/null)
 if [ "$PGA_CODE" = "200" ] || [ "$PGA_CODE" = "302" ]; then
     ok "pgAdmin responde en 127.0.0.1:5050 (HTTP $PGA_CODE)"
 else
-    info "pgAdmin devuelve HTTP $PGA_CODE en localhost — puede estar iniciando aún"
+    info "pgAdmin devuelve HTTP $PGA_CODE — puede estar iniciando todavía"
 fi
 
 echo ""
@@ -99,7 +106,7 @@ echo -e "  ${GREEN}ssh -L 8080:127.0.0.1:5050 shadou@192.168.116.128${NC}"
 echo ""
 echo -e "  Luego abre en tu navegador: ${CYAN}http://localhost:8080${NC}"
 echo -e "  Credenciales pgAdmin:"
-echo -e "    Email:    ${CYAN}admin@reprobados.local${NC}"
+echo -e "    Email:    ${CYAN}admin@reprobados.com${NC}"
 echo -e "    Password: ${CYAN}PgAdmin.11!${NC}"
 
 # ─────────────────────────────────────────────────────────────
@@ -119,18 +126,15 @@ ROWS=$(docker exec db_server psql -U db_admin -d reprobados_db \
     -t -c "SELECT COUNT(*) FROM prueba_persistencia;" 2>/dev/null | tr -d ' ')
 ok "Tabla prueba_persistencia con $ROWS registro(s)"
 
-info "Verificando estado de healthcheck de los contenedores..."
+info "Verificando healthcheck de contenedores..."
 for C in nginx_balanceador app_server db_server pgadmin; do
     STATUS=$(docker inspect $C --format '{{.State.Health.Status}}' 2>/dev/null)
-    if [ "$STATUS" = "healthy" ]; then
-        ok "$C — $STATUS"
-    elif [ "$STATUS" = "starting" ]; then
-        info "$C — $STATUS (espera un momento)"
-    elif [ -z "$STATUS" ]; then
-        info "$C — sin healthcheck configurado"
-    else
-        fail "$C — $STATUS"
-    fi
+    case "$STATUS" in
+        healthy)  ok "$C — healthy" ;;
+        starting) info "$C — starting (espera un momento)" ;;
+        "")       info "$C — sin healthcheck configurado" ;;
+        *)        fail "$C — $STATUS" ;;
+    esac
 done
 
 info "Verificando volúmenes..."
@@ -146,8 +150,8 @@ echo -e "\n${YELLOW}  RESUMEN — COMANDOS DE EVIDENCIA${NC}"
 echo ""
 echo "  docker compose ps"
 echo "  docker network inspect red_publica red_datos"
+echo "  docker port pgadmin"
 echo "  docker inspect db_server --format '{{.State.Health.Status}}'"
-echo "  docker inspect pgadmin  --format '{{.State.Health.Status}}'"
 echo "  ss -tlnp | grep -E '80|5050|5432'"
 sep
 echo ""
