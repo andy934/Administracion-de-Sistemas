@@ -83,7 +83,7 @@ services:
 
     volumes:
       - roundcube_data:/var/roundcube/db
-      - ./roundcube/config.docker.inc.php:/var/www/html/config/config.docker.inc.php:ro
+      - ./roundcube/config.docker.inc.php:/var/www/html/config/config.docker.inc.php
 
     networks:
       - mail_network
