@@ -77,13 +77,12 @@ services:
       ROUNDCUBEMAIL_PRODUCT_NAME:   "reprobados.com Webmail"
       ROUNDCUBEMAIL_USERNAME_DOMAIN: reprobados.com
 
-      # ── TLS — manejado por config.inc.php ───────────────────
-      ROUNDCUBEMAIL_IMAP_AUTH_TYPE: LOGIN
-      ROUNDCUBEMAIL_SMTP_AUTH_TYPE: LOGIN
+      # ── TLS — aceptar certificados autofirmados ─────────────
+      ROUNDCUBEMAIL_IMAP_CONN_OPTIONS: 'a:1:{s:3:"ssl";a:2:{s:11:"verify_peer";b:0;s:16:"verify_peer_name";b:0;}}'
+      ROUNDCUBEMAIL_SMTP_CONN_OPTIONS: 'a:1:{s:3:"ssl";a:2:{s:11:"verify_peer";b:0;s:16:"verify_peer_name";b:0;}}'
 
     volumes:
       - roundcube_data:/var/roundcube/db
-      - ./roundcube/config.inc.php:/var/www/html/config/config.inc.php:ro
 
     networks:
       - mail_network
