@@ -1,41 +1,24 @@
 # ═══════════════════════════════════════════════════════════════
 # Práctica 12 Parte 2 — Portal Webmail Roundcube
-# Complemento al stack de mailserver (tarea12)
-# ═══════════════════════════════════════════════════════════════
-#
-# Servicios nuevos:
-#   roundcube  — Cliente webmail PHP (puerto 80)
-#   mariadb    — BD para preferencias, contactos y sesiones
-#
-# Red: mail_network (compartida con mailserver)
-# Volúmenes: roundcube_db, roundcube_data
 # ═══════════════════════════════════════════════════════════════
 
 services:
 
-  # ─────────────────────────────────────────────────────────────
-  # 1. BASE DE DATOS DEL PORTAL — MariaDB
-  # ─────────────────────────────────────────────────────────────
   mariadb:
     image: mariadb:11-jammy
     container_name: mariadb_webmail
     restart: always
-
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MARIADB_DATABASE:      ${DB_NAME}
       MARIADB_USER:          ${DB_USER}
       MARIADB_PASSWORD:      ${DB_PASSWORD}
-
     expose:
       - "3306"
-
     volumes:
       - roundcube_db:/var/lib/mysql
-
     networks:
       - mail_network
-
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 15s
@@ -43,55 +26,35 @@ services:
       retries: 5
       start_period: 30s
 
-  # ─────────────────────────────────────────────────────────────
-  # 2. PORTAL WEBMAIL — Roundcube
-  # ─────────────────────────────────────────────────────────────
   roundcube:
     image: roundcube/roundcubemail:latest-apache
     container_name: roundcube_webmail
     restart: always
-
     ports:
       - "80:80"
-
     environment:
-      # ── Conexión a MariaDB ──────────────────────────────────
-      ROUNDCUBEMAIL_DB_TYPE:     mysql
-      ROUNDCUBEMAIL_DB_HOST:     mariadb
-      ROUNDCUBEMAIL_DB_PORT:     3306
-      ROUNDCUBEMAIL_DB_NAME:     ${DB_NAME}
-      ROUNDCUBEMAIL_DB_USER:     ${DB_USER}
-      ROUNDCUBEMAIL_DB_PASSWORD: ${DB_PASSWORD}
-
-      # ── Conexión al servidor de correo ──────────────────────
-      ROUNDCUBEMAIL_DEFAULT_HOST:   ssl://mailserver
-      ROUNDCUBEMAIL_DEFAULT_PORT:   993
-      ROUNDCUBEMAIL_SMTP_SERVER:    tls://mailserver
-      ROUNDCUBEMAIL_SMTP_PORT:      587
-
-      # ── Seguridad de sesión ─────────────────────────────────
-      ROUNDCUBEMAIL_DES_KEY:        ${SESSION_KEY}
+      ROUNDCUBEMAIL_DB_TYPE:          mysql
+      ROUNDCUBEMAIL_DB_HOST:          mariadb
+      ROUNDCUBEMAIL_DB_PORT:          3306
+      ROUNDCUBEMAIL_DB_NAME:          ${DB_NAME}
+      ROUNDCUBEMAIL_DB_USER:          ${DB_USER}
+      ROUNDCUBEMAIL_DB_PASSWORD:      ${DB_PASSWORD}
+      ROUNDCUBEMAIL_DEFAULT_HOST:     ssl://mailserver
+      ROUNDCUBEMAIL_DEFAULT_PORT:     993
+      ROUNDCUBEMAIL_SMTP_SERVER:      tls://mailserver
+      ROUNDCUBEMAIL_SMTP_PORT:        587
+      ROUNDCUBEMAIL_DES_KEY:          ${SESSION_KEY}
       ROUNDCUBEMAIL_SESSION_LIFETIME: 10
-
-      # ── Personalización institucional ───────────────────────
-      ROUNDCUBEMAIL_PRODUCT_NAME:   "reprobados.com Webmail"
-      ROUNDCUBEMAIL_USERNAME_DOMAIN: reprobados.com
-
-      # ── TLS — aceptar certificados autofirmados ─────────────
-      ROUNDCUBEMAIL_IMAP_CONN_OPTIONS: 'a:1:{s:3:"ssl";a:2:{s:11:"verify_peer";b:0;s:16:"verify_peer_name";b:0;}}'
-      ROUNDCUBEMAIL_SMTP_CONN_OPTIONS: 'a:1:{s:3:"ssl";a:2:{s:11:"verify_peer";b:0;s:16:"verify_peer_name";b:0;}}'
-
+      ROUNDCUBEMAIL_PRODUCT_NAME:     "reprobados.com Webmail"
+      ROUNDCUBEMAIL_USERNAME_DOMAIN:  reprobados.com
     volumes:
       - roundcube_data:/var/roundcube/db
-      - ./roundcube/config.docker.inc.php:/var/www/html/config/config.docker.inc.php
-
+      - ./roundcube/ssl-fix.sh:/docker-entrypoint.d/99-ssl-fix.sh
     networks:
       - mail_network
-
     depends_on:
       mariadb:
         condition: service_healthy
-
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
@@ -99,21 +62,14 @@ services:
       retries: 3
       start_period: 40s
 
-# ─────────────────────────────────────────────────────────────
-# VOLÚMENES
-# ─────────────────────────────────────────────────────────────
 volumes:
   roundcube_db:
     name: roundcube_db
     driver: local
-
   roundcube_data:
     name: roundcube_data
     driver: local
 
-# ─────────────────────────────────────────────────────────────
-# RED COMPARTIDA CON MAILSERVER
-# ─────────────────────────────────────────────────────────────
 networks:
   mail_network:
     name: mail_network
