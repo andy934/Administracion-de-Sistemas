@@ -10,7 +10,7 @@ $config['username_domain']    = 'reprobados.com';
 $config['mail_domain']        = 'reprobados.com';
 
 // ── Servidor IMAP (mailserver en red Docker) ────────────────────
-$config['default_host']       = 'tls://mailserver';
+$config['default_host']       = 'ssl://mailserver';
 $config['default_port']       = 993;
 
 // ── Servidor SMTP ───────────────────────────────────────────────

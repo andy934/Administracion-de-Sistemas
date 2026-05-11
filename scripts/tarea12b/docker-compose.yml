@@ -64,7 +64,7 @@ services:
       ROUNDCUBEMAIL_DB_PASSWORD: ${DB_PASSWORD}
 
       # ── Conexión al servidor de correo ──────────────────────
-      ROUNDCUBEMAIL_DEFAULT_HOST:   tls://mailserver
+      ROUNDCUBEMAIL_DEFAULT_HOST:   ssl://mailserver
       ROUNDCUBEMAIL_DEFAULT_PORT:   993
       ROUNDCUBEMAIL_SMTP_SERVER:    tls://mailserver
       ROUNDCUBEMAIL_SMTP_PORT:      587
@@ -83,7 +83,7 @@ services:
 
     volumes:
       - roundcube_data:/var/roundcube/db
-      - ./roundcube/config.inc.php:/var/roundcube/config/config.inc.php:ro
+      - ./roundcube/config.inc.php:/var/www/html/config/config.inc.php:ro
 
     networks:
       - mail_network
