@@ -33,7 +33,7 @@ docker run --rm \
     alpine \
     tar czf "/backup/mail_backup_$FECHA.tar.gz" \
         -C / var/mail var/mail-state \
-        --warning=no-file-changed
+
 
 if [ $? -eq 0 ]; then
     TAMANO=$(du -sh "$ARCHIVO_BACKUP" | cut -f1)
