@@ -24,7 +24,7 @@ services:
     cap_add:
       - NET_ADMIN
     healthcheck:
-      test: ["CMD", "ss", "-lntp", "|", "grep", "-q", ":25"]
+      test: ["CMD-SHELL", "ss -lntp | grep -q :25"]
       timeout: 3s
       retries: 3
 

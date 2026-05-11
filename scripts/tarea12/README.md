@@ -8,7 +8,7 @@
 - **OpenDKIM** - Firma digital de correos
 
 ## Servidor
-- IP: 192.168.100.10
+- IP: 192.168.116.128
 - Dominio: reprobados.com
 - Hostname: mail.reprobados.com
 
@@ -16,7 +16,7 @@
 
 ```bash
 # 1. Copiar esta carpeta al servidor
-scp -r tarea12/ usuario@192.168.100.10:~/
+scp -r tarea12/ usuario@192.168.116.128:~/
 
 # 2. Conectarse al servidor
 ssh usuario@192.168.116.128
@@ -108,13 +108,13 @@ docker compose stop mailserver  # 2. Detener contenedor
 ## Configuracion de cliente de correo (Thunderbird/Mailspring)
 
 - **Servidor entrante (IMAP)**
-  - Servidor: 192.168.100.10
+  - Servidor: 192.168.116.128
   - Puerto: 993
   - SSL: SSL/TLS
   - Usuario: director@reprobados.com
 
 - **Servidor saliente (SMTP)**
-  - Servidor: 192.168.100.10
+  - Servidor: 192.168.116.128
   - Puerto: 587
   - SSL: STARTTLS
   - Usuario: director@reprobados.com

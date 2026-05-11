@@ -8,7 +8,7 @@ set -e
 
 DOMINIO="reprobados.com"
 HOSTNAME_MAIL="mail.reprobados.com"
-IP_SERVIDOR="192.168.100.10"
+IP_SERVIDOR="192.168.116.128"
 DIR_TAREA="$(cd "$(dirname "$0")" && pwd)"
 DIR_CERTS="$DIR_TAREA/certs"
 DIR_CONFIG="$DIR_TAREA/config"
