@@ -31,12 +31,6 @@ chmod +x setup.sh backup.sh restore.sh pruebas.sh
 sudo ./setup.sh
 ```
 
-## Cuentas de correo
-| Cuenta | Contraseña |
-|--------|-----------|
-| director@reprobados.com | Director@2026! |
-| admin@reprobados.com | Admin@2026! |
-
 ## Puertos
 | Puerto | Protocolo | Uso |
 |--------|-----------|-----|
